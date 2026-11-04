@@ -10,13 +10,15 @@ Tests the architectural principles derived from Ontological Clarity (Not a ToE):
 2. Gradual Lossy Compression via Linear + ReLU Funnel (Zero Convolutions, Zero Self-Attention):
    - Layer 1 performs high-ratio global compression (2352 -> 256) with ReLU cutting off insignificant bits.
    - Subsequent layers gradually compress into the lowest-dimensional representation z* (256 -> 64 -> 32 -> 10).
-3. Two Training Pathways:
+3. Two Training Pathways & Head-to-Head Baselines:
    - Pathway 2 (Forward-Only 10-Group Determination): Trains only the forward pass by measuring how cleanly
      representations dissolve into 10 mutually orthogonal collective identity groups (tested in both
      few-shot/full-set prototype grouping and purely unsupervised 10-way entropy/orthogonality grouping).
    - Pathway 1 (Diffusion-Like Per-Sample Closed-Loop Convergence): Trains on each few-shot sample until
      convergence by unfolding z* -> X_hat and feeding X_hat back into the input encoder E(X_hat) so
      E(G(z*)) = z* in latent space while anchoring previously converged basins.
+   - Baselines: Standard Cross-Entropy MLP (I-only, output CE loss) and Standard Pixel-Loss Autoencoder
+     (surface reconstruction loss ||X_hat - X||^2) with identical internal layer widths (256 -> 64 -> 32 -> 10).
 """
 
 import gzip
@@ -325,6 +327,91 @@ def run_pathway2_forward_grouping(x_train: np.ndarray, y_train: np.ndarray, x_te
     return results, full_model, full_protos
 
 
+def run_traditional_baselines(x_train: np.ndarray, i_train: np.ndarray, y_train: np.ndarray, x_test: np.ndarray, i_test: np.ndarray, y_test: np.ndarray):
+    print("\n=== Traditional Baselines (Standard Cross-Entropy MLP & Surface Pixel-Loss Autoencoder) ===")
+    mlp_results = {}
+    ae_results = {}
+
+    for shots_per_class in [1, 5, 10, 50, 6000]:
+        rng = np.random.default_rng(42)
+        if shots_per_class < 6000:
+            indices = [rng.choice(np.where(y_train == c)[0], size=shots_per_class, replace=False) for c in range(10)]
+            sub_idx = np.concatenate(indices)
+            x_sub, i_sub, y_sub = x_train[sub_idx], i_train[sub_idx], y_train[sub_idx]
+            epochs = 100 if shots_per_class <= 10 else 60
+            bsz = min(len(x_sub), 64)
+            lr = 2e-3
+        else:
+            x_sub, i_sub, y_sub = x_train, i_train, y_train
+            epochs = 12
+            bsz = 256
+            lr = 1.5e-3
+
+        # 1. Standard Cross-Entropy MLP (I-only, 784 -> 256 -> 64 -> 32 -> 10)
+        mlp = AdamMLP(dims=(784, 256, 64, 32, 10), lr=lr, seed=42)
+        for ep in range(epochs):
+            perm = rng.permutation(len(i_sub))
+            for k in range(0, len(i_sub), bsz):
+                b = perm[k:k + bsz]
+                _, u4, _, cache = mlp.forward(i_sub[b])
+                du4 = (softmax(u4) - np.eye(10, dtype=np.float32)[y_sub[b]]) / len(b)
+                mlp.backward_and_step(cache, du4)
+        mlp_acc = evaluate_model(mlp, i_test, y_test, prototypes=None)
+        mlp_protos = compute_prototypes(mlp, i_sub[:5000], y_sub[:5000])
+        sim_m = mlp_protos @ mlp_protos.T
+        mlp_cos = float(np.mean(np.abs(sim_m[~np.eye(10, dtype=bool)])))
+        _, _, _, c_m = mlp.forward(i_test[:1000])
+        mlp_cut = float(np.mean(c_m[6] == 0.0) * 100.0)
+
+        # 2. Standard Pixel-Loss Autoencoder (2352 -> 256 -> 64 -> 32 -> 784, surface loss = ||I_hat - I||^2)
+        ae_enc = AdamMLP(dims=(2352, 256, 64, 32, 10), lr=lr, seed=42)
+        W_dec = rng.normal(0.0, np.sqrt(2.0 / 32), size=(32, 784)).astype(np.float32)
+        b_dec = np.zeros((1, 784), dtype=np.float32)
+        mW, vW = np.zeros_like(W_dec), np.zeros_like(W_dec)
+        mb, vb = np.zeros_like(b_dec), np.zeros_like(b_dec)
+        t_step = 0
+        for ep in range(epochs):
+            perm = rng.permutation(len(x_sub))
+            for k in range(0, len(x_sub), bsz):
+                t_step += 1
+                b = perm[k:k + bsz]
+                z_s, u4, _, cache = ae_enc.forward(x_sub[b])
+                u_d = z_s @ W_dec + b_dec
+                i_hat = np.clip(u_d, 0.0, 1.0)
+                di = (i_hat - i_sub[b]) * (2.0 / len(b)) * ((u_d > 0.0) & (u_d < 1.0)).astype(np.float32)
+                dW = z_s.T @ di + 1e-4 * W_dec
+                db = np.sum(di, axis=0, keepdims=True)
+                dz_s = di @ W_dec.T
+                mW = 0.9 * mW + 0.1 * dW
+                vW = 0.999 * vW + 0.001 * (dW ** 2)
+                mb = 0.9 * mb + 0.1 * db
+                vb = 0.999 * vb + 0.001 * (db ** 2)
+                W_dec -= lr * (mW / (1 - 0.9 ** t_step)) / (np.sqrt(vW / (1 - 0.999 ** t_step)) + 1e-8)
+                b_dec -= lr * (mb / (1 - 0.9 ** t_step)) / (np.sqrt(vb / (1 - 0.999 ** t_step)) + 1e-8)
+                ae_enc.backward_and_step(cache, np.zeros_like(u4), dz_star_extra=dz_s)
+        ae_protos = compute_prototypes(ae_enc, x_sub[:5000], y_sub[:5000])
+        ae_acc = evaluate_model(ae_enc, x_test, y_test, prototypes=ae_protos)
+        sim_ae = ae_protos @ ae_protos.T
+        ae_cos = float(np.mean(np.abs(sim_ae[~np.eye(10, dtype=bool)])))
+
+        label_str = f"{shots_per_class}-shot" if shots_per_class < 6000 else "Full MNIST"
+        print(
+            f"  [{label_str:10s}] Std MLP Acc: {mlp_acc:6.2f}% (Cos: {mlp_cos:.3f}, z* Cut: {mlp_cut:4.1f}%) | "
+            f"Pixel-Loss AE Proto Acc: {ae_acc:6.2f}% (Cos: {ae_cos:.3f})"
+        )
+        mlp_results[f"shots_{shots_per_class}"] = {
+            "accuracy": round(mlp_acc, 2),
+            "inter_group_off_diagonal_cosine": round(mlp_cos, 3),
+            "z_star_relu_cutoff_pct": round(mlp_cut, 1),
+        }
+        ae_results[f"shots_{shots_per_class}"] = {
+            "prototype_accuracy": round(ae_acc, 2),
+            "inter_group_off_diagonal_cosine": round(ae_cos, 3),
+        }
+
+    return mlp_results, ae_results
+
+
 def run_pathway1_diffusion_fewshot(x_train: np.ndarray, y_train: np.ndarray, x_test: np.ndarray, y_test: np.ndarray):
     print("\n=== Pathway 1: Diffusion-Like Per-Sample Closed-Loop Convergence (E(G(z*)) = z*) ===")
     results = {}
@@ -530,9 +617,12 @@ def main():
     train_img, train_lbl, test_img, test_lbl = load_mnist()
     x_train = build_8bit_tuple_representation(train_img, couple_background=True)
     x_test = build_8bit_tuple_representation(test_img, couple_background=True)
+    i_train = (train_img.astype(np.float32) / 255.0).reshape(len(train_img), 784)
+    i_test = (test_img.astype(np.float32) / 255.0).reshape(len(test_img), 784)
     print(f"  Train shape: {x_train.shape} (784 pixels x 3 coordinates [x, y, I]), Test shape: {x_test.shape}")
 
     p2_results, full_model, full_protos = run_pathway2_forward_grouping(x_train, train_lbl, x_test, test_lbl)
+    mlp_results, ae_results = run_traditional_baselines(x_train, i_train, train_lbl, x_test, i_test, test_lbl)
     p1_results = run_pathway1_diffusion_fewshot(x_train, train_lbl, x_test, test_lbl)
     unsup_results = run_unsupervised_10group_test(x_train, train_lbl, x_test, test_lbl)
 
@@ -551,6 +641,8 @@ def main():
     summary = {
         "representation": "784 x 3 (x, y, I) in [0, 255]^3 (2,352 dims -> 256 -> 64 -> 32 -> 10 Linear+ReLU Funnel)",
         "pathway2_forward_grouping": p2_results,
+        "standard_cross_entropy_mlp_baseline": mlp_results,
+        "standard_pixel_loss_autoencoder_baseline": ae_results,
         "pathway1_diffusion_fewshot_closed_loop": p1_results,
         "pathway2b_unsupervised_10group": unsup_results,
         "multi_resolution_generalization": res_results,

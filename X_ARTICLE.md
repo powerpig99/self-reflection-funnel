@@ -8,16 +8,16 @@ Yet why did deep learning split into two completely opposite architectural crutc
 
 Because both **attention** and **convolution** are mechanisms of **external validation**: convolution polls immediate neighbors inside a `3 × 3` window, and self-attention polls every other token in the room (`O(N²)`)—both literally seeking meaning from horizontal, external relationships among surface marks while missing the **internal reflection (`E(G(z*)) = z*`)** that is the center of meaning.
 
-By tracing representation from first principles, we can drop **both** `3 × 3` convolutions and `O(N²)` self-attention—replacing them with a simple four-stage **`Linear + ReLU` Determination Funnel** over 8-bit **`(x, y, I) ∈ [0, 255]³` coordinate-value tuples** and a **self-reflective closed loop (`X → z* → X̂ → E(X̂) = z*`)**.
+By tracing representation from first principles, we can drop **both** `3 × 3` convolutions and `O(N²)` self-attention—replacing them with a simple four-stage **`Linear + ReLU` Determination Funnel** over 8-bit **`(x, y, I) ∈ [0, 255]³` coordinate-value tuples** and a **100% mask-free self-reflective closed loop (`X → z* → X̂ → E(X̂) = z*`)**.
 
-In a pure NumPy benchmark on MNIST (running in 4.5 seconds on a CPU, with zero convolutions and zero attention), this simple funnel:
+In a pure NumPy benchmark on MNIST (running in under 5 seconds on a CPU, with zero convolutions and zero attention), this simple funnel:
 - Reaches **`97.93%`** full-test accuracy and beats standard cross-entropy MLPs across 1-shot, 5-shot, and 10-shot learning,
-- Carves **`30× to 60×` more orthogonal latent representations** (`0.011–0.019` off-diagonal cosine vs. `0.551–0.736`) while **zeroing out `83.9%` of its bottleneck bits via `ReLU`**,
+- Carves **`29× to 62×` more orthogonal latent representations** (`0.011–0.019` off-diagonal cosine vs. `0.551–0.736`) while **zeroing out `83.9%` of its bottleneck bits via `ReLU`**,
 - Discovers **all `10 / 10` digit groups with zero labels** (`53.91%` unsupervised cluster purity),
-- Exposes why **surface-loss autoencoders (`‖X̂ − X‖²`) collapse** to **`20.31%`** accuracy (`0.956` cosine collapse) as sample count grows, and
-- Restores severely occluded digits across **4 self-reflective closed-loop passes (`X_occ → z₀ → X̂₁ → E(X̂₁) = z₁ → …`)**, beating standard open-loop networks by **`+34.13%` to `+36.08%`** while cutting canvas reconstruction error by **`62%` to `75%`**.
+- Shows why **surface-loss autoencoders (`‖X̂ − X‖²`) fail to separate abstractions** (`0.935` cosine overlap, capped at **`74.68%`** accuracy on full MNIST vs. **`97.93%`** when loss is measured at `z*`), and
+- Restores severely occluded digits across **4 mask-free self-reflective passes (`X_occ → z₀ → X̂₁ → E(X̂₁) = z₁ → …`)**—climbing **`+7.06%` across the loop on Center Blackout (`69.47% → 76.53%`)**, beating both clean-trained (`+33.4%` to `+39.1%`) and identically corruption-trained (`+0.7%` to `+8.0%`) open-loop MLPs while cutting canvas reconstruction error by **`40%` to `74%`**.
 
-Here is the exact chain of first-principles derivations behind why **self-reflection replaces self-attention**—and the code to run it yourself in 20 seconds.
+Here is the exact chain of first-principles derivations behind why **self-reflection replaces self-attention**—and the code to run it yourself in 30 seconds.
 
 ---
 
@@ -65,7 +65,7 @@ Look at how biological vision and coordinate geometry solve this cleanly:
 
 ---
 
-### 4. The Live MNIST Benchmark: Proof of Surface-Loss Collapse & `60×` Orthogonality
+### 4. The Live MNIST Benchmark: Surface-Loss Entanglement vs. `60×` Orthogonality
 
 We tested a pure 4-layer `Linear + ReLU` Determination Funnel (`2,352 → 256 → 64 → 32 (z*) → 10`) on raw 8-bit MNIST against two traditional baselines with the exact same internal layer widths:
 1. A **Standard Cross-Entropy MLP** (`I`-only input, standard output cross-entropy loss), and
@@ -73,36 +73,36 @@ We tested a pure 4-layer `Linear + ReLU` Determination Funnel (`2,352 → 256 �
 
 | Regime (`seed = 42`) | Determination Funnel (`(x, y, I)` + Latent Group Loss) | Standard Cross-Entropy MLP (`I`-Only, Output CE) | Standard Pixel-Loss Autoencoder (`‖X̂ − X‖²` at Surface) | `z*` Off-Diag Cosine (Funnel vs. Std MLP) | `z*` `ReLU` Cutoff % (Funnel vs. Std MLP) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **1-Shot (10 samples)** | **44.54%** (Closed-Loop) / **43.39%** (Fwd) | 39.19% | 26.61% (`Cos: 0.382`) | **`0.014` vs. `0.634`** (`45×` cleaner) | **`78.8%` vs. `44.0%`** |
-| **5-Shot (50 samples)** | **68.20%** | 65.23% | 23.02% (`Cos: 0.669`) | **`0.017` vs. `0.694`** (`41×` cleaner) | **`80.8%` vs. `23.5%`** |
-| **10-Shot (100 samples)** | **74.92%** | 71.70% | 27.81% (`Cos: 0.877`) | **`0.017` vs. `0.736`** (`43×` cleaner) | **`76.2%` vs. `27.7%`** |
-| **50-Shot (500 samples)** | **88.52%** | 88.84% | **20.31%** (`Cos: 0.956`) | **`0.011` vs. `0.683`** (`62×` cleaner) | **`81.9%` vs. `36.6%`** |
-| **Full MNIST (60,000)** | **97.93%** (`4.54s` CPU) | 97.71% | — | **`0.019` vs. `0.551`** (`29×` cleaner) | **`83.9%` vs. `40.6%`** (`71.6%` L1) |
+| **1-Shot (10 samples)** | **43.39%** (Fwd) / **42.08%** (Closed-Loop) | 39.19% | 30.05% (`Cos: 0.367`) | **`0.014` vs. `0.634`** (`45×` cleaner) | **`78.8%` vs. `44.0%`** |
+| **5-Shot (50 samples)** | **68.20%** | 65.23% | 44.54% (`Cos: 0.870`) | **`0.017` vs. `0.694`** (`41×` cleaner) | **`80.8%` vs. `23.5%`** |
+| **10-Shot (100 samples)** | **74.92%** | 71.70% | 60.21% (`Cos: 0.757`) | **`0.017` vs. `0.736`** (`43×` cleaner) | **`76.2%` vs. `27.7%`** |
+| **50-Shot (500 samples)** | **88.52%** | 88.84% | 74.24% (`Cos: 0.894`) | **`0.011` vs. `0.683`** (`62×` cleaner) | **`81.9%` vs. `36.6%`** |
+| **Full MNIST (60,000)** | **97.93%** (`4.79s` CPU) | 97.71% | **74.68%** (`Cos: 0.935`) | **`0.019` vs. `0.551`** (`29×` cleaner) | **`83.9%` vs. `40.6%`** (`71.6%` L1) |
 
 Look at what the numbers show:
-- **Proof that Surface Expression Loss Destroys the Abstraction**: In the **Standard Pixel-Loss Autoencoder**, giving the network *more* data (`1-shot → 50-shot`) drives its 10 digit prototypes into the **same direction** (`Off-Diag Cos: 0.382 → 0.956`) and crashes classification accuracy to **`20.31%`**! Why? Because computing loss on surface pixels forces the `32d` bottleneck to memorize stroke thickness, slant, and brightness rather than digit identity. Measuring loss at `z*` jumps `50-shot` accuracy from **`20.31%` to `88.52%`**.
-- **`30× to 60×` More Orthogonal & `83.9%` `ReLU` Sparsity**: Standard cross-entropy leaves internal representations entangled (`0.551–0.736` cosine overlap). Our forward-only 10-group objective slices off **`71.6%` of Layer 1** and **`83.9%` of `z*`** via `ReLU`, leaving ~5 active coordinates per digit across 10 nearly `90°` orthogonal cones (`Off-Diag Cos = 0.011–0.019`).
+- **Why Surface Expression Loss (`‖X̂ − X‖²`) Fails to Separate the Abstraction**: In the **Standard Pixel-Loss Autoencoder**, computing loss on surface pixels forces the positive `ReLU` bottleneck `z* ≥ 0` to memorize stroke thickness, slant, and shared pixel intensity—driving its 10 digit prototypes into a single shared cone (`Off-Diag Cos: 0.367 → 0.894 → 0.935`) and capping full-MNIST accuracy at **`74.68%`**. Relocating the loss to the internal determination `z*` jumps full-MNIST accuracy from **`74.68%` to `97.93%`** with `49×` more orthogonal cones (`0.019` vs. `0.935`).
+- **`29× to 62×` More Orthogonal & `83.9%` `ReLU` Sparsity**: Standard cross-entropy leaves internal representations entangled (`0.551–0.736` cosine overlap). Our forward-only 10-group objective slices off **`71.6%` of Layer 1** and **`83.9%` of `z*`** via `ReLU`, leaving ~5 active coordinates per digit across 10 nearly `90°` orthogonal cones (`Off-Diag Cos = 0.011–0.019`).
 - **Zero-Label Unsupervised Discovery & Multi-Resolution Generalization**: With **zero labels** (training only to balance marginal group entropy and sharpen conditional group entropy), the forward funnel activates **all `10 / 10` groups** and reaches **`53.91%` unsupervised cluster purity** (`5.4×` random chance). And evaluated zero-shot across `14×14`, `28×28`, and `56×56` resolutions mapped into `[0, 255]³`, the same weights score **`96.26%` / `97.77%` / `97.75%`**.
 
 ---
 
-### 5. Watching the Closed Loop (`X → z* → X̂ → E(X̂)`) Clean Up Severe Occlusions
+### 5. Watching the 100% Mask-Free Self-Reflection Loop (`X → z* → X̂ → E(X̂)`) Clean Up Severe Occlusions
 
-When we couple the upward funnel `E` with a lightweight downward funnel `G` (`32d unit sphere → 128 → 784 → 2,352`) and feed the re-expressed canvas `X̂` back into `E(X̂)` across **4 iterative closed-loop passes (`Step 0 → Step 4`)**, look at what happens on all `10,000` unseen test digits under three extreme corruptions:
+When we couple the upward funnel `E` with a hierarchical downward funnel `G(z*, z2, z1)` (`352d → 256d → 784d`) and feed the self-reflected canvas back into `E` across **4 iterative closed-loop passes (`Step 0 → Step 4`)—with ZERO external occlusion mask passed at test time**—look at what happens on all `10,000` unseen test digits against both a Clean-Trained Standard MLP and a Same-Corruption-Trained Standard MLP:
 
-| Corruption Regime (`10,000` Test Digits) | Standard Open-Loop MLP | Loop Step 0 (`E(X_occ)`) | Loop Step 1 (`E(G(z₀))`) | Loop Step 2 (`E(G(z₁))`) | Loop Step 3 (`E(G(z₂))`) | Loop Step 4 (`E(G(z₃))`) | Canvas Pixel Error Reduction (`Step 0 → 3`) |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Picket Fence** (3 erased bands + 2 bright vertical bars) | 44.33% | 77.02% | 79.94% | 80.30% | **80.41%** | 80.37% | **`-62%` MSE** (`0.0774 → 0.0294`) |
-| **Center Blackout** (`10×12` core erased) | 40.34% | 61.92% | 71.79% | 73.44% | 74.04% | **74.47%** | **`-45%` MSE** (`0.0513 → 0.0284`) |
-| **Heavy Clutter** (`45%` dropout + `15%` bright spikes) | 54.77% | 83.68% | 86.84% | 87.18% | 87.30% | **87.38%** | **`-75%` MSE** (`0.1221 → 0.0309`) |
+| Corruption Regime (`100% Mask-Free`) | Std MLP (Clean-Trained) | Std MLP (Same-Corruption-Trained) | Loop Step 0 (`E(X_occ)`) | Loop Step 1 (Mask-Free) | Loop Step 2 (Mask-Free) | Loop Step 3 (Mask-Free) | Loop Step 4 (Mask-Free) | Canvas Pixel Error Reduction (`Step 0 → 4`) |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Picket Fence** (3 erased bands + 2 bright vertical bars) | 42.95% | 80.44% | 79.45% | 81.05% | 81.76% | 82.04% | **82.09%** (`+2.64%` loop) | **`-58%` MSE** (`0.0774 → 0.0324`) |
+| **Center Blackout** (`10×12` core erased) | 40.15% | 68.53% | 69.47% | 73.88% | 75.69% | 76.18% | **76.53%** (`+7.06%` loop) | **`-40%` MSE** (`0.0513 → 0.0307`) |
+| **Heavy Clutter** (`45%` dropout + `15%` bright spikes) | 52.24% | 84.93% | 84.61% | 85.58% | **85.65%** | 85.56% | 85.49% (`+1.04%` loop) | **`-74%` MSE** (`0.1221 → 0.0318`) |
 
-Under **Center Blackout**, where the central `10 × 12` core of every digit is wiped out, a standard open-loop MLP collapses to **`40.34%`**. In our closed-loop funnel, `Step 0` sees the outer stroke tips (`61.92%`), `G(z₀)` re-articulates the missing central bridges onto the `[0, 255]³` canvas, and feeding that canvas back into Layer 1 (`Steps 1–4`) lifts accuracy by **`+12.55%` across the loop to `74.47%`** (`+34.13%` over the standard MLP). Under **Picket Fence**, `ReLU` slices off the bright vertical fence bars because they don't align with any digit's orthogonal cone, reaching **`80.41%`** (`+36.08%` over the standard MLP) while reconnecting the erased horizontal bands.
+Under **Center Blackout**, where the central `10 × 12` core of every digit is wiped out, a clean-trained MLP collapses to **`40.15%`** and even a corruption-trained open-loop MLP stalls at **`68.53%`**. In our mask-free funnel, `Step 0` starts at `69.47%`, `G(z*, z2, z1)` detects the conflict between the missing center and its downward expectation without any external mask, reconstructs the missing central bridges onto the `[0, 255]³` canvas, and feeding that canvas back into Layer 1 (`Steps 1–4`) lifts accuracy by **`+7.06%` across the loop to `76.53%`** (`+8.00%` over the same-corruption MLP and `+36.38%` over the clean-trained MLP). Under **Picket Fence**, the mask-free loop climbs from `79.45%` (`Step 0`) to **`82.09%`** (`Step 4`), suppressing the bright vertical fence bars and reconnecting the erased horizontal bands while cutting canvas MSE by **`58%`**.
 
-Look at the deeper principle this benchmark makes visible: **both self-attention and convolution are mechanisms of external validation**. Convolution polls immediate neighbors inside a `3 × 3` window; self-attention polls every other token in the room (`O(N²)`)—both literally seeking meaning from external relationships among surface parts while missing the internal reflection that is the center of meaning. And just as our pixel-loss autoencoder collapsed (`20.31%`) when trying to satisfy every external surface pixel and our open-loop network collapsed (`40.34%`) under conflicting surface cues, **no amount of external validation can ever satisfy or resolve a felt internal conflict—true meaning lies in coherence as a result of internal reflection (`E(G(z*)) = z*`)**.
+Look at the deeper principle this benchmark makes visible: **both self-attention and convolution are mechanisms of external validation**. Convolution polls immediate neighbors inside a `3 × 3` window; self-attention polls every other token in the room (`O(N²)`)—both literally seeking meaning from external relationships among surface parts while missing the internal reflection that is the center of meaning. And just as our pixel-loss autoencoder failed to separate digit identities (`Cos: 0.935`) when trying to satisfy every external surface pixel and open-loop classifiers stalled under conflicting surface cues, **no amount of external validation can ever satisfy or resolve a felt internal conflict—true meaning lies in coherence as a result of internal reflection (`E(G(z*)) = z*`)**.
 
 ---
 
 ### Reproducible Code & Benchmark
 
 - **Published X Article**: [https://x.com/powerpig/status/2117986860995621026](https://x.com/powerpig/status/2117986860995621026)
-- **Standalone Code & 20-Second Pure-NumPy Benchmark**: [https://github.com/powerpig99/self-reflection-funnel](https://github.com/powerpig99/self-reflection-funnel)
+- **Standalone Code & 30-Second Pure-NumPy Benchmark**: [https://github.com/powerpig99/self-reflection-funnel](https://github.com/powerpig99/self-reflection-funnel)

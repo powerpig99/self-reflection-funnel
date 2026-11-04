@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """
-Multi-Step Closed-Loop Inference on Occluded & Corrupted MNIST Digits
+100% Mask-Free Multi-Step Closed-Loop Self-Reflection on Occluded & Corrupted MNIST Digits
 (X_occluded -> z_0 -> X_hat_1 -> E(X_hat_1) = z_1 -> X_hat_2 -> ...)
 
-Tests how the Ontological Determination Funnel (Upward E + Downward G coupled on the
-32d unit sphere z*) cleans up three severe occlusions on unseen test digits across
-iterative closed-loop passes, and compares head-to-head against a Standard Feedforward
-Cross-Entropy MLP. Also generates `assets/occlusion_refinement_grid.png`.
+Tests how the Ontological Determination Funnel (Upward E + Hierarchical Downward G)
+resolves three severe occlusions on all 10,000 unseen test digits across iterative
+self-reflection passes WITH ZERO EXTERNAL OCCLUSION MASK, and compares head-to-head
+against BOTH:
+  1. A Clean-Trained Standard Feedforward Cross-Entropy MLP, and
+  2. A Same-Corruption-Trained Standard Feedforward Cross-Entropy MLP (trained on the
+     exact same random_training_corruption distribution and step count as E).
+Also generates `assets/occlusion_refinement_grid.png` and `results/occlusion_results.json`.
 """
 
 import json
@@ -31,15 +35,19 @@ from run_experiment import (
 ASSETS_DIR = EXP_DIR / "assets"
 
 
-class TwoWayDecoder:
+class HierarchicalReflectionDecoder:
     """
-    2-Layer ReLU + Clipped-Linear Downward Articulation Funnel G operating on normalized z* (32d unit sphere):
-    z*_norm (32) -> h1 (128, ReLU) -> I_hat (784, clipped to [0, 1]) -> (x, y, I_hat) (2352).
+    Downward Self-Reflection Funnel G:
+    Takes the upward funnel's multi-scale representations:
+      - z*_norm (32d collective identity cone)
+      - z2_norm (64d mid-level stroke abstraction)
+      - z1_norm (256d first-layer global ReLU cut)
+    Total input = 352d -> 256d (ReLU) -> 784d clean canvas expectation `i_hat`.
     """
-    def __init__(self, d_latent=32, d_hid=128, out_dim=784, lr=3e-3, seed=42):
+    def __init__(self, d_in=352, d_hid=256, out_dim=784, lr=2.5e-3, seed=42):
         rng = np.random.default_rng(seed)
         self.lr = lr
-        self.W1 = rng.normal(0.0, np.sqrt(2.0 / d_latent), size=(d_latent, d_hid)).astype(np.float32)
+        self.W1 = rng.normal(0.0, np.sqrt(2.0 / d_in), size=(d_in, d_hid)).astype(np.float32)
         self.b1 = np.zeros((1, d_hid), dtype=np.float32)
         self.W2 = rng.normal(0.0, np.sqrt(2.0 / d_hid), size=(d_hid, out_dim)).astype(np.float32)
         self.b2 = np.zeros((1, out_dim), dtype=np.float32)
@@ -55,29 +63,29 @@ class TwoWayDecoder:
         self.x_flat = np.broadcast_to(x_grid, (28, 28)).reshape(1, 784)
         self.y_flat = np.broadcast_to(y_grid, (28, 28)).reshape(1, 784)
 
-    def forward(self, z_star_norm: np.ndarray):
-        u1 = z_star_norm @ self.W1 + self.b1
+    def forward(self, z_star_n: np.ndarray, z2_n: np.ndarray, z1_n: np.ndarray):
+        zin = np.concatenate([z_star_n, z2_n, z1_n], axis=-1)
+        u1 = zin @ self.W1 + self.b1
         h1 = np.maximum(0.0, u1)
         u2 = h1 @ self.W2 + self.b2
         i_hat = np.clip(u2, 0.0, 1.0)
-        x_hat = np.stack([self.x_flat * i_hat, self.y_flat * i_hat, i_hat], axis=-1).reshape(len(z_star_norm), 2352)
-        return i_hat, x_hat, (z_star_norm, u1, h1, u2, i_hat)
+        return i_hat, (zin, u1, h1, u2, i_hat)
 
     def backward_and_step(self, cache, di_hat: np.ndarray, weight_decay: float = 1e-4):
-        z_star_norm, u1, h1, u2, i_hat = cache
+        zin, u1, h1, u2, i_hat = cache
         du2 = di_hat * ((u2 > 0.0) & (u2 < 1.0)).astype(np.float32)
         dW2 = h1.T @ du2 + weight_decay * self.W2
         db2 = np.sum(du2, axis=0, keepdims=True)
         dh1 = du2 @ self.W2.T
         du1 = dh1 * (u1 > 0.0).astype(np.float32)
-        dW1 = z_star_norm.T @ du1 + weight_decay * self.W1
+        dW1 = zin.T @ du1 + weight_decay * self.W1
         db1 = np.sum(du1, axis=0, keepdims=True)
 
         self.t += 1
         b1_c = 1.0 - 0.9 ** self.t
         b2_c = 1.0 - 0.999 ** self.t
         for W, b, dW, db, mW, vW, mb, vb in [
-            (self.W1, self.b1, dW1, db1, self.mW1, self.vW1, self.mb1, self.mb1),
+            (self.W1, self.b1, dW1, db1, self.mW1, self.vW1, self.mb1, self.vb1),
             (self.W2, self.b2, dW2, db2, self.mW2, self.vW2, self.mb2, self.vb2),
         ]:
             mW[:] = 0.9 * mW + 0.1 * dW
@@ -88,9 +96,32 @@ class TwoWayDecoder:
             b -= self.lr * (mb / b1_c) / (np.sqrt(vb / b2_c) + 1e-8)
 
 
-def apply_occlusions(images_uint8: np.ndarray, mode: str, seed: int = 123):
+def compute_encoder_grads(encoder: AdamMLP, cache, du4: np.ndarray, dz_star_extra: np.ndarray, weight_decay: float = 1e-4):
+    """Compute analytical gradients for AdamMLP so Step-0 and Step-1 passes combine into a single Adam update."""
+    x, u1, z1, u2, z2, u3, z_star, u4, g_cone = cache
+    dW3 = z_star.T @ du4 + weight_decay * encoder.W[3]
+    db3 = np.sum(du4, axis=0, keepdims=True)
+    dz_star = du4 @ encoder.W[3].T + dz_star_extra
+
+    du3 = dz_star * (u3 > 0.0).astype(np.float32)
+    dW2 = z2.T @ du3 + weight_decay * encoder.W[2]
+    db2 = np.sum(du3, axis=0, keepdims=True)
+    dz2 = du3 @ encoder.W[2].T
+
+    du2 = dz2 * (u2 > 0.0).astype(np.float32)
+    dW1 = z1.T @ du2 + weight_decay * encoder.W[1]
+    db1 = np.sum(du2, axis=0, keepdims=True)
+    dz1 = du2 @ encoder.W[1].T
+
+    du1 = dz1 * (u1 > 0.0).astype(np.float32)
+    dW0 = x.T @ du1 + weight_decay * encoder.W[0]
+    db0 = np.sum(du1, axis=0, keepdims=True)
+    return [dW0, dW1, dW2, dW3], [db0, db1, db2, db3]
+
+
+def apply_occlusions(images_uint8: np.ndarray, mode: str, seed: int = 123) -> np.ndarray:
     """
-    Create occluded/corrupted 28x28 uint8 images and a binary mask M (1 = corrupted/occluded region, 0 = known).
+    Create occluded/corrupted 28x28 uint8 images (returns ONLY the corrupted images—NO mask!).
     Modes:
       - 'picket_fence': 3 horizontal slats erased + 2 bright vertical fence bars drawn across the digit
       - 'center_blackout': a 10x12 rectangular blackout wiping out the core of the digit
@@ -99,34 +130,29 @@ def apply_occlusions(images_uint8: np.ndarray, mode: str, seed: int = 123):
     rng = np.random.default_rng(seed)
     out = images_uint8.copy()
     n, h, w = out.shape
-    occluded_mask = np.zeros((n, h, w), dtype=np.float32)
 
     if mode == "picket_fence":
         for r_start in [7, 13, 19]:
             out[:, r_start:r_start + 2, :] = 0
-            occluded_mask[:, r_start:r_start + 2, :] = 1.0
         for c_bar in [9, 18]:
             out[:, 4:24, c_bar:c_bar + 2] = 220
-            occluded_mask[:, 4:24, c_bar:c_bar + 2] = 1.0
     elif mode == "center_blackout":
         out[:, 9:19, 8:20] = 0
-        occluded_mask[:, 9:19, 8:20] = 1.0
     elif mode == "heavy_clutter":
         drop = rng.random((n, h, w)) < 0.45
         clutter = rng.random((n, h, w)) < 0.15
         out[drop] = 0
         out[clutter] = rng.integers(140, 255, size=int(np.sum(clutter)), dtype=np.uint8)
-        occluded_mask = (drop | clutter).astype(np.float32)
     else:
         raise ValueError(f"Unknown mode: {mode}")
 
-    return out, occluded_mask.reshape(n, 784)
+    return out
 
 
 def random_training_corruption(ib_clean: np.ndarray, x_flat: np.ndarray, y_flat: np.ndarray, rng: np.random.Generator) -> np.ndarray:
     """
-    Generate diverse occlusions (missing bars, bright fence bars, box cutouts, and clutter) during training
-    so E learns to slice off both missing-stroke gaps and bright occluder clutter via ReLU.
+    Generate training corruptions (missing bars, bright vertical bars, and clutter) applied
+    identically to BOTH the Same-Corruption Standard MLP baseline and the Determination Funnel.
     """
     bsz = len(ib_clean)
     im = ib_clean.reshape(bsz, 28, 28).copy()
@@ -143,6 +169,26 @@ def random_training_corruption(ib_clean: np.ndarray, x_flat: np.ndarray, y_flat:
     return x_corr
 
 
+def mask_free_target_canvas(i_occ: np.ndarray, i_hat: np.ndarray) -> np.ndarray:
+    """
+    100% MASK-FREE self-reflection operator Phi(i_occ, i_hat):
+    - ReLU-cuts faint background noise in `i_hat` below 0.05.
+    - Measures internal agreement between `i_occ` and `i_hat_clean`:
+      `agree` is high iff both show a stroke (`i_occ * i_hat_clean`) AND `i_occ` does not have
+      an unexplained bright spike/bar far above `i_hat_clean`.
+    - Where they agree, preserves 80% of `i_occ`.
+    - Where they conflict (missing stroke `i_occ=0` OR foreign bar/spike `i_occ >> i_hat_clean`),
+      resolves 85% to `i_hat_clean`!
+    """
+    i_hat_clean = np.clip((i_hat - 0.05) / 0.95, 0.0, 1.0)
+    prod_agree = np.clip((i_occ * i_hat_clean) / 0.15, 0.0, 1.0)
+    no_excess_spike = np.clip(1.0 - np.maximum(0.0, i_occ - i_hat_clean - 0.10) / 0.35, 0.0, 1.0)
+    agree = prod_agree * no_excess_spike
+
+    keep_obs_w = 0.80 * agree + 0.15 * (1.0 - agree)
+    return np.clip(keep_obs_w * i_occ + (1.0 - keep_obs_w) * i_hat_clean, 0.0, 1.0)
+
+
 def main():
     print("Loading MNIST and building 8-bit (x, y, I) in [0, 255]^3 universe...")
     train_img, train_lbl, test_img, test_lbl = load_mnist()
@@ -151,55 +197,99 @@ def main():
     i_train = (train_img.astype(np.float32) / 255.0).reshape(len(train_img), 784)
     i_test = (test_img.astype(np.float32) / 255.0).reshape(len(test_img), 784)
 
-    print("\n1. Training Standard Feedforward Cross-Entropy MLP Baseline...")
-    rng = np.random.default_rng(42)
-    std_mlp = AdamMLP(dims=(784, 256, 64, 32, 10), lr=1.5e-3, seed=42)
+    y_grid = np.linspace(0.0, 1.0, 28, dtype=np.float32)[:, None]
+    x_grid = np.linspace(0.0, 1.0, 28, dtype=np.float32)[None, :]
+    x_flat = np.broadcast_to(x_grid, (28, 28)).reshape(1, 784)
+    y_flat = np.broadcast_to(y_grid, (28, 28)).reshape(1, 784)
+
     bsz = 256
-    for ep in range(10):
-        perm = rng.permutation(len(i_train))
+    print("\n1. Training Standard Feedforward Cross-Entropy MLP Baselines (Clean-Trained & Same-Corruption-Trained)...")
+    std_mlp_clean = AdamMLP(dims=(784, 256, 64, 32, 10), lr=1.5e-3, seed=42)
+    std_mlp_corr = AdamMLP(dims=(784, 256, 64, 32, 10), lr=1.5e-3, seed=42)
+
+    rng_m = np.random.default_rng(42)
+    for ep in range(12):
+        perm = rng_m.permutation(len(i_train))
         for i in range(0, len(i_train), bsz):
             b = perm[i:i + bsz]
-            _, u4, _, cache = std_mlp.forward(i_train[b])
-            du4 = (softmax(u4) - np.eye(10, dtype=np.float32)[train_lbl[b]]) / len(b)
-            std_mlp.backward_and_step(cache, du4)
+            ib = i_train[b]
+            yb = train_lbl[b]
+            one_hot = np.eye(10, dtype=np.float32)[yb]
 
-    print("2. Training Closed-Loop Ontological Determination Funnel (E + G coupled on 32d unit sphere z*)...")
+            _, u4_c, _, cache_c = std_mlp_clean.forward(ib)
+            std_mlp_clean.backward_and_step(cache_c, (softmax(u4_c) - one_hot) / len(b))
+
+            _, u4_a1, _, cache_a1 = std_mlp_corr.forward(ib)
+            std_mlp_corr.backward_and_step(cache_a1, (softmax(u4_a1) - one_hot) / len(b))
+            xb_corr = random_training_corruption(ib, x_flat, y_flat, rng_m)
+            ib_corr = xb_corr[:, 2::3]
+            _, u4_a2, _, cache_a2 = std_mlp_corr.forward(ib_corr)
+            std_mlp_corr.backward_and_step(cache_a2, (softmax(u4_a2) - one_hot) / len(b))
+
+    print("2. Training Closed-Loop Determination Funnel (E + Hierarchical G) on the EXACT SAME corruption stream...")
     encoder = AdamMLP(dims=(2352, 256, 64, 32, 10), lr=1.5e-3, seed=42)
-    decoder = TwoWayDecoder(d_latent=32, d_hid=128, out_dim=784, lr=3e-3, seed=42)
+    decoder = HierarchicalReflectionDecoder(d_in=352, d_hid=256, out_dim=784, lr=2.5e-3, seed=42)
 
     t0 = time.time()
+    rng_f = np.random.default_rng(42)
     for ep in range(12):
-        perm = rng.permutation(len(x_train))
+        perm = rng_f.permutation(len(x_train))
         for i in range(0, len(x_train), bsz):
             b = perm[i:i + bsz]
             xb_clean = x_train[b]
-            yb = train_lbl[b]
             ib_clean = i_train[b]
+            yb = train_lbl[b]
+            one_hot = np.eye(10, dtype=np.float32)[yb]
 
+            # Pass A: Clean upward pass
             z_clean, u4_clean, _, cache_clean = encoder.forward(xb_clean)
             z_clean_n, _ = normalize_rows(z_clean)
 
-            i_hat, x_hat, dec_cache = decoder.forward(z_clean_n)
-            di_hat = (i_hat - ib_clean) * (2.0 / len(b))
-            decoder.backward_and_step(dec_cache, di_hat)
+            # Pass B: Corrupted input (Step 0) -> E -> G reconstructs clean canvas
+            xb_corr = random_training_corruption(ib_clean, x_flat, y_flat, rng_f)
+            ib_corr = xb_corr[:, 2::3]
+            z_0, u4_0, _, cache_0 = encoder.forward(xb_corr)
+            z_0_n, norms_0 = normalize_rows(z_0)
+            z2_0_n, _ = normalize_rows(cache_0[4])
+            z1_0_n, _ = normalize_rows(cache_0[2])
 
-            xb_corr = random_training_corruption(ib_clean, decoder.x_flat, decoder.y_flat, rng)
-            mix_input = 0.75 * xb_corr + 0.25 * x_hat
-            z_corr, u4_corr, _, cache_corr = encoder.forward(mix_input)
-            z_corr_n, corr_norms = normalize_rows(z_corr)
+            i_hat_0, dec_cache_0 = decoder.forward(z_0_n, z2_0_n, z1_0_n)
+            decoder.backward_and_step(dec_cache_0, (i_hat_0 - ib_clean) * (2.0 / len(b)))
 
-            dz_match_n = (z_corr_n - z_clean_n) * (2.0 / len(b))
-            proj = np.sum(dz_match_n * z_corr_n, axis=-1, keepdims=True)
-            dz_match = (dz_match_n - z_corr_n * proj) / corr_norms
+            # Step 1 mask-free reflection canvas -> E -> G
+            ib_ref1 = mask_free_target_canvas(ib_corr, i_hat_0)
+            xb_ref1 = np.stack([x_flat * ib_ref1, y_flat * ib_ref1, ib_ref1], axis=-1).reshape(len(b), 2352)
+            z_1, u4_1, _, cache_1 = encoder.forward(xb_ref1)
+            z_1_n, norms_1 = normalize_rows(z_1)
+            z2_1_n, _ = normalize_rows(cache_1[4])
+            z1_1_n, _ = normalize_rows(cache_1[2])
 
-            one_hot = np.eye(10, dtype=np.float32)[yb]
+            i_hat_1, dec_cache_1 = decoder.forward(z_1_n, z2_1_n, z1_1_n)
+            decoder.backward_and_step(dec_cache_1, (i_hat_1 - ib_clean) * (2.0 / len(b)))
+
+            # Update 1 on E: Clean pass
             du4_c = (softmax(u4_clean) - one_hot) / len(b)
             dz_grp_c = latent_group_orthogonality_grad(z_clean, yb) * 1.5
             encoder.backward_and_step(cache_clean, du4_c, dz_star_extra=dz_grp_c)
 
-            du4_r = (softmax(u4_corr) - one_hot) / len(b)
-            dz_grp_r = latent_group_orthogonality_grad(z_corr, yb) * 1.0 + dz_match * 2.0
-            encoder.backward_and_step(cache_corr, du4_r, dz_star_extra=dz_grp_r)
+            # Update 2 on E: Single combined Adam step on (0.45 * Step-0 + 0.55 * Step-1)
+            dz_m0_n = (z_0_n - z_clean_n) * (2.0 / len(b))
+            proj_0 = np.sum(dz_m0_n * z_0_n, axis=-1, keepdims=True)
+            dz_m0 = (dz_m0_n - z_0_n * proj_0) / norms_0
+            du4_0 = (softmax(u4_0) - one_hot) / len(b)
+            dz_grp_0 = latent_group_orthogonality_grad(z_0, yb) * 1.0 + dz_m0 * 1.5
+            gW0, gb0 = compute_encoder_grads(encoder, cache_0, du4_0, dz_grp_0)
+
+            dz_m1_n = (z_1_n - z_clean_n) * (2.0 / len(b))
+            proj_1 = np.sum(dz_m1_n * z_1_n, axis=-1, keepdims=True)
+            dz_m1 = (dz_m1_n - z_1_n * proj_1) / norms_1
+            du4_1 = (softmax(u4_1) - one_hot) / len(b)
+            dz_grp_1 = latent_group_orthogonality_grad(z_1, yb) * 1.0 + dz_m1 * 2.0
+            gW1, gb1 = compute_encoder_grads(encoder, cache_1, du4_1, dz_grp_1)
+
+            gW_comb = [0.45 * w0 + 0.55 * w1 for w0, w1 in zip(gW0, gW1)]
+            gb_comb = [0.45 * b0 + 0.55 * b1 for b0, b1 in zip(gb0, gb1)]
+            encoder._adam_update(gW_comb, gb_comb)
 
     print(f"   Trained E + G in {time.time() - t0:.2f}s.")
     protos = compute_prototypes(encoder, x_train[:10000], train_lbl[:10000])
@@ -207,39 +297,46 @@ def main():
     z_test_clean, _, _, _ = encoder.forward(x_test)
     z_test_clean_n, _ = normalize_rows(z_test_clean)
 
-    print("\n3. Running Multi-Step Closed-Loop Inference (Step 0 -> Step 1 -> Step 2 -> Step 3 -> Step 4)...")
+    print("\n3. Running 100% Mask-Free Multi-Step Closed-Loop Inference (Step 0 -> Step 1 -> Step 2 -> Step 3 -> Step 4)...")
     all_metrics = {}
     grid_samples = None
 
     for mode in ["picket_fence", "center_blackout", "heavy_clutter"]:
-        occ_uint8, occ_mask = apply_occlusions(test_img, mode=mode, seed=42)
+        occ_uint8 = apply_occlusions(test_img, mode=mode, seed=42)  # Zero mask returned or used!
         x_occ = build_8bit_tuple_representation(occ_uint8, couple_background=True)
         i_occ = (occ_uint8.astype(np.float32) / 255.0).reshape(len(test_img), 784)
 
-        _, u4_std, _, _ = std_mlp.forward(i_occ)
-        std_acc = float(np.mean(np.argmax(u4_std, axis=-1) == test_lbl) * 100.0)
+        _, u4_std_clean, _, _ = std_mlp_clean.forward(i_occ)
+        std_clean_acc = float(np.mean(np.argmax(u4_std_clean, axis=-1) == test_lbl) * 100.0)
+
+        _, u4_std_corr, _, _ = std_mlp_corr.forward(i_occ)
+        std_corr_acc = float(np.mean(np.argmax(u4_std_corr, axis=-1) == test_lbl) * 100.0)
 
         cur_i = i_occ.copy()
         cur_x = x_occ.copy()
         z_0, _, _, _ = encoder.forward(x_occ)
         z_0_n, _ = normalize_rows(z_0)
-        z_running_n = z_0_n.copy()
+        z_run_n = z_0_n.copy()
 
         step_stats = []
         snapshots = [i_occ[:200].copy()]
 
         for step in range(5):
-            z_k, u4_k, _, _ = encoder.forward(cur_x)
+            z_k, u4_k, _, cache_k = encoder.forward(cur_x)
             z_k_n, _ = normalize_rows(z_k)
-            if step > 0:
-                z_running_n, _ = normalize_rows(0.45 * z_0_n + 0.55 * z_k_n)
-            else:
-                z_running_n = z_k_n
+            z2_k_n, _ = normalize_rows(cache_k[4])
+            z1_k_n, _ = normalize_rows(cache_k[2])
 
-            sims = z_running_n @ protos.T
+            if step > 0:
+                beta_k = 0.60 * (0.75 ** (step - 1))
+                z_run_n, _ = normalize_rows((1.0 - beta_k) * z_run_n + beta_k * z_k_n)
+            else:
+                z_run_n = z_k_n
+
+            sims = z_run_n @ protos.T
             preds = np.argmax(sims, axis=-1)
             acc_k = float(np.mean(preds == test_lbl) * 100.0)
-            cos_to_clean = float(np.mean(np.sum(z_running_n * z_test_clean_n, axis=-1)))
+            cos_to_clean = float(np.mean(np.sum(z_run_n * z_test_clean_n, axis=-1)))
             pixel_mse = float(np.mean((cur_i - i_test) ** 2))
 
             step_stats.append({
@@ -249,19 +346,12 @@ def main():
                 "pixel_mse_to_clean": round(pixel_mse, 4),
             })
 
-            temp = 10.0 + 5.0 * step
-            weights_10 = softmax(sims * temp)
-            z_proto_n, _ = normalize_rows(weights_10 @ protos)
-            z_step_n, _ = normalize_rows((0.60 - 0.08 * step) * z_running_n + (0.40 + 0.08 * step) * z_proto_n)
-
-            i_hat_k, _, _ = decoder.forward(z_step_n)
-
-            occ_fill = min(0.75 + 0.06 * step, 0.95)
-            unocc_denoise = 0.25 + 0.05 * step
-            cur_i = (
-                occ_mask * ((1.0 - occ_fill) * i_occ + occ_fill * i_hat_k)
-                + (1.0 - occ_mask) * ((1.0 - unocc_denoise) * i_occ + unocc_denoise * i_hat_k)
-            )
+            # Downward reflection from current multi-scale state (z_run_n, z2_k_n, z1_k_n)
+            i_hat_k, _ = decoder.forward(z_run_n, z2_k_n, z1_k_n)
+            target_i = mask_free_target_canvas(i_occ, i_hat_k)
+            # Damped Banach fixed-point canvas step (100% mask-free):
+            gamma_k = 0.55 * (0.70 ** step)
+            cur_i = (1.0 - gamma_k) * cur_i + gamma_k * target_i
             cur_x = np.stack(
                 [decoder.x_flat * cur_i, decoder.y_flat * cur_i, cur_i], axis=-1
             ).reshape(len(test_img), 2352)
@@ -272,16 +362,20 @@ def main():
         if mode == "picket_fence":
             grid_samples = (i_test[:200], snapshots, test_lbl[:200])
 
-        print(f"\n  [{mode.upper()}] Standard Open-Loop MLP Acc: {std_acc:.2f}%")
+        print(
+            f"\n  [{mode.upper()}] Std MLP (Clean-Trained): {std_clean_acc:.2f}% | "
+            f"Std MLP (Same-Corruption-Trained): {std_corr_acc:.2f}%"
+        )
         for st in step_stats:
             print(
-                f"    Step {st['step']} -> Acc: {st['accuracy_pct']:6.2f}% | "
+                f"    Step {st['step']} (Mask-Free) -> Acc: {st['accuracy_pct']:6.2f}% | "
                 f"Latent Cos to Clean z*: {st['latent_cosine_to_clean']:.4f} | "
                 f"Canvas MSE to Clean Digit: {st['pixel_mse_to_clean']:.4f}"
             )
         all_metrics[mode] = {
-            "standard_mlp_open_loop_acc": round(std_acc, 2),
-            "closed_loop_steps": step_stats,
+            "standard_mlp_clean_trained_acc": round(std_clean_acc, 2),
+            "standard_mlp_same_corruption_trained_acc": round(std_corr_acc, 2),
+            "mask_free_closed_loop_steps": step_stats,
         }
 
     clean_200, snaps, lbls_200 = grid_samples
