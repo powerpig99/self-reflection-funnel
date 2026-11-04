@@ -107,4 +107,4 @@ Under **Center Blackout**, where the central `10 × 12` core of every digit is w
 - **Companion Essays (*A Non-Definitive Guide for the Mind*)**:
   - *Abstraction, Determination, and the Three Structural Flaws of Machine Learning*: `https://powerpig99.github.io/not-a-toe/posts/abstraction-determination-and-the-three-structural-flaws-of-machine-learning/`
   - *The Determination Funnel Beyond Convolutions and Attention*: `https://powerpig99.github.io/not-a-toe/posts/the-determination-funnel-beyond-convolutions-and-attention/`
-- **Standalone Code & 20-Second Pure-NumPy Benchmark**: `[GitHub Repository Link]`
+- **Standalone Code & 20-Second Pure-NumPy Benchmark**: [https://github.com/powerpig99/self-reflection-funnel](https://github.com/powerpig99/self-reflection-funnel)
