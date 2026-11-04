@@ -271,9 +271,9 @@ def render_table2(fonts) -> Image.Image:
             (["84.93%"], [fonts["cell"]], [TEXT_MAIN], "center"),
             (["84.61%"], [fonts["cell"]], [TEXT_MUTED], "center"),
             (["85.58%"], [fonts["cell"]], [TEXT_MAIN], "center"),
-            (["85.65%", "(Best Step)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, ACCENT_GREEN], "center"),
+            (["85.65%", "(+1.04% peak)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, ACCENT_GREEN], "center"),
             (["85.56%"], [fonts["cell"]], [TEXT_MAIN], "center"),
-            (["85.49%", "(+1.04% peak gain)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
+            (["85.49%", "(+0.88% loop)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
             (["-74% Pixel MSE", "(0.1221 → 0.0318)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "center"),
         ],
     ]
@@ -332,7 +332,7 @@ def render_table2(fonts) -> Image.Image:
     fy = t_top + header_h + len(rows) * row_h + 18
     draw.text(
         (margin_x, fy),
-        "Latent Cosine Alignment cos(z_k, z*_clean) across Steps 0 → 4:   Picket Fence: 0.8613 → 0.8746   ·   Center Blackout: 0.7365 → 0.8129   ·   Heavy Clutter: 0.8850 → 0.9041",
+        "Latent Cosine Alignment cos(z_k, z*_clean) across Steps 0 → 4:   Picket Fence: 0.8613 → 0.8746   ·   Center Blackout: 0.7365 → 0.8129   ·   Heavy Clutter: 0.8850 → 0.9037",
         fill=ACCENT_PURPLE,
         font=fonts["footer"],
     )
