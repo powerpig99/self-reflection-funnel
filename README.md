@@ -63,7 +63,7 @@ Both scripts automatically download the official MNIST IDX files into `./data/` 
 
 ## 4. Long-Form X Article & Repository
 
-- **Long-Form X Article (in this repo)**: [Attention Is Not at All What You Need—Self-Reflection Is (`X_ARTICLE.md`)](X_ARTICLE.md)
+- **Published X Article**: [Attention Is Not at All What You Need—Self-Reflection Is (`@powerpig` on X)](https://x.com/powerpig/status/2117986860995621026) · [Local Markdown (`X_ARTICLE.md`)](X_ARTICLE.md)
 - **Repository**: [https://github.com/powerpig99/self-reflection-funnel](https://github.com/powerpig99/self-reflection-funnel)
 
 ## License

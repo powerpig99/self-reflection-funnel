@@ -102,4 +102,5 @@ Under **Center Blackout**, where the central `10 × 12` core of every digit is w
 
 ### Reproducible Code & Benchmark
 
+- **Published X Article**: [https://x.com/powerpig/status/2117986860995621026](https://x.com/powerpig/status/2117986860995621026)
 - **Standalone Code & 20-Second Pure-NumPy Benchmark**: [https://github.com/powerpig99/self-reflection-funnel](https://github.com/powerpig99/self-reflection-funnel)
