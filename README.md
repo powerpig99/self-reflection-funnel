@@ -61,6 +61,14 @@ python3 run_occlusion_loop.py
 
 Both scripts automatically download the official MNIST IDX files into `./data/` if not already present, run all benchmarks with analytical gradients in pure NumPy, and write JSON metrics to `./results/` and the visual restoration grid to `./assets/occlusion_refinement_grid.png`.
 
+## 4. Companion Essays & Long-Form X Article
+
+- **Long-Form X Article (in this repo)**: [Attention Is Not at All You Need, But Self-Reflection (`X_ARTICLE.md`)](X_ARTICLE.md)
+- **Living Book Essays (*A Non-Definitive Guide for the Mind*)**:
+  - [Abstraction, Determination, and the Three Structural Flaws of Machine Learning](https://powerpig99.github.io/not-a-toe/posts/abstraction-determination-and-the-three-structural-flaws-of-machine-learning/)
+  - [The Determination Funnel Beyond Convolutions and Attention](https://powerpig99.github.io/not-a-toe/posts/the-determination-funnel-beyond-convolutions-and-attention/)
+- **Repository**: [https://github.com/powerpig99/self-reflection-funnel](https://github.com/powerpig99/self-reflection-funnel)
+
 ## License
 
 MIT License
