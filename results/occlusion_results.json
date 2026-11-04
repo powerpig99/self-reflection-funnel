@@ -1,0 +1,107 @@
+{
+  "picket_fence": {
+    "standard_mlp_open_loop_acc": 44.33,
+    "closed_loop_steps": [
+      {
+        "step": 0,
+        "accuracy_pct": 77.02,
+        "latent_cosine_to_clean": 0.8232,
+        "pixel_mse_to_clean": 0.0774
+      },
+      {
+        "step": 1,
+        "accuracy_pct": 79.94,
+        "latent_cosine_to_clean": 0.8449,
+        "pixel_mse_to_clean": 0.0303
+      },
+      {
+        "step": 2,
+        "accuracy_pct": 80.3,
+        "latent_cosine_to_clean": 0.8478,
+        "pixel_mse_to_clean": 0.0294
+      },
+      {
+        "step": 3,
+        "accuracy_pct": 80.41,
+        "latent_cosine_to_clean": 0.8472,
+        "pixel_mse_to_clean": 0.0294
+      },
+      {
+        "step": 4,
+        "accuracy_pct": 80.37,
+        "latent_cosine_to_clean": 0.8458,
+        "pixel_mse_to_clean": 0.0301
+      }
+    ]
+  },
+  "center_blackout": {
+    "standard_mlp_open_loop_acc": 40.34,
+    "closed_loop_steps": [
+      {
+        "step": 0,
+        "accuracy_pct": 61.92,
+        "latent_cosine_to_clean": 0.6639,
+        "pixel_mse_to_clean": 0.0513
+      },
+      {
+        "step": 1,
+        "accuracy_pct": 71.79,
+        "latent_cosine_to_clean": 0.7533,
+        "pixel_mse_to_clean": 0.0304
+      },
+      {
+        "step": 2,
+        "accuracy_pct": 73.44,
+        "latent_cosine_to_clean": 0.767,
+        "pixel_mse_to_clean": 0.0284
+      },
+      {
+        "step": 3,
+        "accuracy_pct": 74.04,
+        "latent_cosine_to_clean": 0.7711,
+        "pixel_mse_to_clean": 0.0284
+      },
+      {
+        "step": 4,
+        "accuracy_pct": 74.47,
+        "latent_cosine_to_clean": 0.7722,
+        "pixel_mse_to_clean": 0.029
+      }
+    ]
+  },
+  "heavy_clutter": {
+    "standard_mlp_open_loop_acc": 54.77,
+    "closed_loop_steps": [
+      {
+        "step": 0,
+        "accuracy_pct": 83.68,
+        "latent_cosine_to_clean": 0.8692,
+        "pixel_mse_to_clean": 0.1221
+      },
+      {
+        "step": 1,
+        "accuracy_pct": 86.84,
+        "latent_cosine_to_clean": 0.9012,
+        "pixel_mse_to_clean": 0.0338
+      },
+      {
+        "step": 2,
+        "accuracy_pct": 87.18,
+        "latent_cosine_to_clean": 0.9055,
+        "pixel_mse_to_clean": 0.0316
+      },
+      {
+        "step": 3,
+        "accuracy_pct": 87.3,
+        "latent_cosine_to_clean": 0.9055,
+        "pixel_mse_to_clean": 0.0309
+      },
+      {
+        "step": 4,
+        "accuracy_pct": 87.38,
+        "latent_cosine_to_clean": 0.9042,
+        "pixel_mse_to_clean": 0.0312
+      }
+    ]
+  }
+}
