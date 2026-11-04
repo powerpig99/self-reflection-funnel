@@ -6,7 +6,7 @@ In 2017, *"Attention Is All You Need"* launched the modern AI era on a single pr
 
 Yet why did deep learning split into two completely opposite architectural crutches in the first place—**`O(N²)` self-attention** in Transformers, and **rigid `k × k` sliding stencils** in Convolutional Neural Networks (CNNs)?
 
-Because each architecture broke one half of how perception and thought actually work, and then invented a heavy mathematical patch to compensate for the half it broke. You don't need `O(N²)` horizontal attention across surface parts at all—what you actually need is **vertical compression into a low-dimensional abstraction (`z*`) coupled with closed-loop self-reflection (`E(G(z*)) = z*`)**.
+Because both **attention** and **convolution** are mechanisms of **external validation**: convolution polls immediate neighbors inside a `3 × 3` window, and self-attention polls every other token in the room (`O(N²)`)—both literally seeking meaning from horizontal, external relationships among surface marks while missing the **internal reflection (`E(G(z*)) = z*`)** that is the center of meaning.
 
 By tracing representation from first principles, we can drop **both** `3 × 3` convolutions and `O(N²)` self-attention—replacing them with a simple four-stage **`Linear + ReLU` Determination Funnel** over 8-bit **`(x, y, I) ∈ [0, 255]³` coordinate-value tuples** and a **self-reflective closed loop (`X → z* → X̂ → E(X̂) = z*`)**.
 
@@ -98,7 +98,7 @@ When we couple the upward funnel `E` with a lightweight downward funnel `G` (`32
 
 Under **Center Blackout**, where the central `10 × 12` core of every digit is wiped out, a standard open-loop MLP collapses to **`40.34%`**. In our closed-loop funnel, `Step 0` sees the outer stroke tips (`61.92%`), `G(z₀)` re-articulates the missing central bridges onto the `[0, 255]³` canvas, and feeding that canvas back into Layer 1 (`Steps 1–4`) lifts accuracy by **`+12.55%` across the loop to `74.47%`** (`+34.13%` over the standard MLP). Under **Picket Fence**, `ReLU` slices off the bright vertical fence bars because they don't align with any digit's orthogonal cone, reaching **`80.41%`** (`+36.08%` over the standard MLP) while reconnecting the erased horizontal bands.
 
-Look at the deeper irony: **both self-attention and convolution are mechanisms of external validation**. Convolution polls immediate neighbors inside a `3 × 3` window; self-attention polls every other token in the room (`O(N²)`)—both literally seeking meaning from horizontal, external relationships among surface parts while missing the internal reflection (`E(G(z*)) = z*`) that is the real center of meaning.
+Look at the deeper principle this benchmark makes visible: **both self-attention and convolution are mechanisms of external validation**. Convolution polls immediate neighbors inside a `3 × 3` window; self-attention polls every other token in the room (`O(N²)`)—both literally seeking meaning from external relationships among surface parts while missing the internal reflection that is the center of meaning. And just as our pixel-loss autoencoder collapsed (`20.31%`) when trying to satisfy every external surface pixel and our open-loop network collapsed (`40.34%`) under conflicting surface cues, **no amount of external validation can ever satisfy or resolve a felt internal conflict—true meaning lies in coherence as a result of internal reflection (`E(G(z*)) = z*`)**.
 
 ---
 
