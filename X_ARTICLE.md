@@ -1,21 +1,25 @@
-# Beyond Convolutions and Self-Attention: The Determination Funnel
+# Attention Is Not at All You Need, But Self-Reflection
+
+*[Subtitle / Alternative Hook: Attention Is Not at All What You Need—Self-Reflection Is]*
 
 *[Attach Header / Inline Image: `assets/occlusion_refinement_grid.png`]*
 
-Why does modern AI rely on two completely opposite architectural crutches—**`O(N²)` self-attention** in Transformers, and **rigid `k × k` sliding stencils** in Convolutional Neural Networks (CNNs)?
+In 2017, *"Attention Is All You Need"* launched the modern AI era on a single premise: if every surface token attends to every other surface token (`O(N²)` self-attention), a network can learn any structure without recurrent loops or convolutions.
 
-Because each architecture broke one half of how perception and thought actually work, and then invented a heavy mathematical patch to compensate for the half it broke.
+Yet why did deep learning split into two completely opposite architectural crutches in the first place—**`O(N²)` self-attention** in Transformers, and **rigid `k × k` sliding stencils** in Convolutional Neural Networks (CNNs)?
 
-By tracing representation from first principles, we can drop **both** `3 × 3` convolutions and `O(N²)` self-attention—replacing them with a simple four-stage **`Linear + ReLU` Determination Funnel** over 8-bit **`(x, y, I) ∈ [0, 255]³` coordinate-value tuples** coupled with a **closed-loop re-observation pass (`E(G(z*)) = z*`)**.
+Because each architecture broke one half of how perception and thought actually work, and then invented a heavy mathematical patch to compensate for the half it broke. You don't need `O(N²)` horizontal attention across surface parts at all—what you actually need is **vertical compression into a low-dimensional abstraction (`z*`) coupled with closed-loop self-reflection (`E(G(z*)) = z*`)**.
+
+By tracing representation from first principles, we can drop **both** `3 × 3` convolutions and `O(N²)` self-attention—replacing them with a simple four-stage **`Linear + ReLU` Determination Funnel** over 8-bit **`(x, y, I) ∈ [0, 255]³` coordinate-value tuples** and a **self-reflective closed loop (`X → z* → X̂ → E(X̂) = z*`)**.
 
 In a pure NumPy benchmark on MNIST (running in 4.5 seconds on a CPU, with zero convolutions and zero attention), this simple funnel:
 - Reaches **`97.93%`** full-test accuracy and beats standard cross-entropy MLPs across 1-shot, 5-shot, and 10-shot learning,
 - Carves **`30× to 60×` more orthogonal latent representations** (`0.011–0.019` off-diagonal cosine vs. `0.551–0.736`) while **zeroing out `83.9%` of its bottleneck bits via `ReLU`**,
 - Discovers **all `10 / 10` digit groups with zero labels** (`53.91%` unsupervised cluster purity),
 - Exposes why **surface-loss autoencoders (`‖X̂ − X‖²`) collapse** to **`20.31%`** accuracy (`0.956` cosine collapse) as sample count grows, and
-- Restores severely occluded digits across **4 closed-loop passes (`X_occ → z₀ → X̂₁ → E(X̂₁) = z₁ → …`)**, beating standard open-loop networks by **`+34.13%` to `+36.08%`** while cutting canvas reconstruction error by **`62%` to `75%`**.
+- Restores severely occluded digits across **4 self-reflective closed-loop passes (`X_occ → z₀ → X̂₁ → E(X̂₁) = z₁ → …`)**, beating standard open-loop networks by **`+34.13%` to `+36.08%`** while cutting canvas reconstruction error by **`62%` to `75%`**.
 
-Here is the exact chain of first-principles derivations behind it—and the code to run it yourself in 20 seconds.
+Here is the exact chain of first-principles derivations behind why **self-reflection replaces self-attention**—and the code to run it yourself in 20 seconds.
 
 ---
 
@@ -33,15 +37,15 @@ Viewed through these three inferences, mainstream machine learning inverts dimen
 
 ---
 
-### 2. Why Transformers Needed Self-Attention—and Why Separating `z*` from `X` Eliminates It
+### 2. Why Attention Is Not What You Need—Self-Reflection Is
 
 Why did the Transformer work so well for language? Because in language, every word is already a compressed human abstraction, so language acts simultaneously as the material operated on and the abstract operation over it.
 
 Yet that conflation created two traps:
 
 1. **The Closed Dictionary Loop (`Word ↔ Word`)**: Looking downward, the parts that constitute the meaning of a word like `"fire"` are *not* other words—they are non-linguistic sensory and causal distinctions in reality. No amount of `Word ↔ Word` self-attention can ever derive the meaning of a word. A text-only LLM works only because it reviews the **structural construction of language**, while **the human Mind reading the output supplies the meaning** by reconnecting those words downward to lived reality.
-2. **Why `O(N²)` Self-Attention (`Q · Kᵀ`) Is Redundant**: In a standard Transformer, if `N` tokens enter Layer 1, `N` token vectors exit Layer 80. Because the network refuses to separate the low-dimensional representation (`z*`) from the surface expression (`X`), every token has to message every other token (`O(N²)`) to simulate a shared abstraction horizontally.
-   - Once you **separate the representation (`z*`) from the expression (`X`)**—gradually compressing `X` upward into `z*`, re-expressing `z*` downward into an output `X̂ = G(z*)`, and **feeding `X̂` straight back into the input encoder `E(X̂)` so that `E(X̂) = z*` in latent space**—the self-referential relationship is already created by the closed loop and **compiled directly into the weights**. Just like a diffusion model passing iteratively through a bottleneck, you don't need a Transformer self-attention matrix at all.
+2. **Why Self-Reflection (`E(G(z*)) = z*`) Replaces `O(N²)` Self-Attention (`Q · Kᵀ`)**: In a standard Transformer, if `N` tokens enter Layer 1, `N` token vectors exit Layer 80. Because the network refuses to separate the low-dimensional representation (`z*`) from the surface expression (`X`), every token has to message every other token (`O(N²)`) to simulate a shared abstraction horizontally.
+   - Once you **separate the representation (`z*`) from the expression (`X`)**—gradually compressing `X` upward into `z*`, re-expressing `z*` downward into an output `X̂ = G(z*)`, and **feeding `X̂` straight back into the input encoder `E(X̂)` so that `E(X̂) = z*` in latent space**—the network performs **self-reflection**: it observes its own expression and verifies that the re-observed expression resolves back to the exact same internal determination. That self-reflective relationship is compiled directly into the weights—just like a diffusion model passing iteratively through a bottleneck—so you don't need a Transformer self-attention matrix at all.
 
 ---
 
