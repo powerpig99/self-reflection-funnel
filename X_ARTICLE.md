@@ -98,6 +98,8 @@ When we couple the upward funnel `E` with a lightweight downward funnel `G` (`32
 
 Under **Center Blackout**, where the central `10 × 12` core of every digit is wiped out, a standard open-loop MLP collapses to **`40.34%`**. In our closed-loop funnel, `Step 0` sees the outer stroke tips (`61.92%`), `G(z₀)` re-articulates the missing central bridges onto the `[0, 255]³` canvas, and feeding that canvas back into Layer 1 (`Steps 1–4`) lifts accuracy by **`+12.55%` across the loop to `74.47%`** (`+34.13%` over the standard MLP). Under **Picket Fence**, `ReLU` slices off the bright vertical fence bars because they don't align with any digit's orthogonal cone, reaching **`80.41%`** (`+36.08%` over the standard MLP) while reconnecting the erased horizontal bands.
 
+Look at the deeper irony: **both self-attention and convolution are mechanisms of external validation**. Convolution polls immediate neighbors inside a `3 × 3` window; self-attention polls every other token in the room (`O(N²)`)—both literally seeking meaning from horizontal, external relationships among surface parts while missing the internal reflection (`E(G(z*)) = z*`) that is the real center of meaning.
+
 ---
 
 ### Reproducible Code & Benchmark
