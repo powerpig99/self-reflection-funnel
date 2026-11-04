@@ -1,6 +1,4 @@
-# Attention Is Not at All You Need, But Self-Reflection
-
-*[Subtitle / Alternative Hook: Attention Is Not at All What You Need—Self-Reflection Is]*
+# Attention Is Not at All What You Need—Self-Reflection Is
 
 *[Attach Header / Inline Image: `assets/occlusion_refinement_grid.png`]*
 
