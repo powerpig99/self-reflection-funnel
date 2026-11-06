@@ -94,7 +94,7 @@ def draw_multiline_centered(draw, box, lines, fonts_list, colors_list, align="ce
 
 
 def render_table1(fonts) -> Image.Image:
-    col_widths = [280, 340, 270, 310, 330, 310]
+    col_widths = [280, 355, 255, 310, 330, 310]
     table_w = sum(col_widths)
     margin_x = 44
     margin_top = 40
@@ -147,7 +147,7 @@ def render_table1(fonts) -> Image.Image:
         ],
         [
             (["Full MNIST (60,000)"], [fonts["cell_bold"]], [TEXT_MAIN], "left"),
-            (["97.93% (256→64→32) / 97.67% (105→32→11)"], [fonts["cell_bold"]], [ACCENT_GREEN], "center"),
+            (["98.07% (105→32→11) / 97.93% (256→64→32)"], [fonts["cell_bold"]], [ACCENT_GREEN], "center"),
             (["97.71%"], [fonts["cell"]], [TEXT_MAIN], "center"),
             (["74.68%  (Cos: 0.935)"], [fonts["cell_bold"]], [ACCENT_RED], "center"),
             (["0.019 vs. 0.551", "(29× more orthogonal)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "center"),
@@ -334,7 +334,7 @@ def render_table2(fonts) -> Image.Image:
 
 
 def render_table3(fonts) -> Image.Image:
-    """Render Table 3: 3-Stage Dual-Cut Architecture (Gradual Layer Discovery + Internal-Loss Convergence Loop)."""
+    """Render Table 3: 4-Stage Dual-Cut Architecture (Gradual Layer Discovery + Reality-Anchored Relaxation)."""
     col_widths = [340, 380, 260, 215, 225, 200, 220]
     table_w = sum(col_widths)
     margin_x = 44
@@ -356,16 +356,7 @@ def render_table3(fonts) -> Image.Image:
 
     rows = [
         [
-            (["Stage 1: L = 0 (Direct Cut)"], [fonts["cell_bold"]], [TEXT_MAIN], "left"),
-            (["[2352, 10] → [2352, 10]"], [fonts["mono"]], [TEXT_MUTED], "center"),
-            (["23,530 params", "(0.0% shed)"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "center"),
-            (["92.59%"], [fonts["cell"]], [TEXT_MAIN], "center"),
-            (["92.59% (Proto)"], [fonts["cell"]], [TEXT_MUTED], "center"),
-            (["0.1492"], [fonts["cell"]], [ACCENT_RED], "center"),
-            (["Cos: 0.2231", "Next Mid: 153"], [fonts["cell"], fonts["footer"]], [TEXT_MUTED, ACCENT_BLUE], "center"),
-        ],
-        [
-            (["Stage 1: L = 1 (1st Split)"], [fonts["cell_bold"]], [TEXT_MAIN], "left"),
+            (["Stage 1: L = 0 → L = 1"], [fonts["cell_bold"]], [TEXT_MAIN], "left"),
             (["[2352, 153, 10]", "→ [2352, 121, 10]"], [fonts["mono"], fonts["mono_bold"]], [TEXT_MUTED, ACCENT_BLUE], "center"),
             (["285,933 params", "(-20.9% shed)"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, ACCENT_GREEN], "center"),
             (["97.56%"], [fonts["cell_bold"]], [TEXT_MAIN], "center"),
@@ -392,22 +383,31 @@ def render_table3(fonts) -> Image.Image:
             (["Cos: 0.0191", "Next Mid: 10 (Fixed Pt!)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, ACCENT_GREEN], "center"),
         ],
         [
-            (["Stage 3: Natural Hard 5%", "(High Internal Loss Tail)"], [fonts["cell_bold"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "left"),
+            (["Stage 2: Frozen E + Trained G", "(Fence / Blackout / Clutter)"], [fonts["cell_bold"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "left"),
             (["G: [10+11, 32, 105, 287, 784]", "(Midpoint 287 bridges 105→784)"], [fonts["mono"], fonts["footer"]], [ACCENT_PURPLE, TEXT_MUTED], "center"),
-            (["10.30 mean steps", "(95% low-loss: 0.03 steps)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "center"),
-            (["63.80%", "(Low-loss 95%: 99.13%)"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, ACCENT_GREEN], "center"),
-            (["64.60% (+0.80%)", "(14 hard digits rescued)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
-            (["0.341 → 0.223", "(-34.6% IntLoss)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "center"),
-            (["Halts on ||Δz|| ≤ ε", "All 10k: 97.40%"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, ACCENT_GREEN], "center"),
-        ],
-        [
-            (["Stage 3: Unseen Occlusions", "(Fence / Blackout / Clutter)"], [fonts["cell_bold"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "left"),
-            (["Frozen E + Frozen G", "(Zero Retraining at Test)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "center"),
-            (["3.7 / 4.8 / 3.4 steps", "(p90: 11 / 16 / 10 steps)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_PURPLE, TEXT_MUTED], "center"),
+            (["3.7 / 4.8 / 3.4 steps", "(All 10k Nat: 97.40%)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "center"),
             (["74.1% / 55.9% / 83.9%"], [fonts["cell"]], [TEXT_MUTED], "center"),
             (["75.7% / 59.2% / 85.3%", "(+1.6% / +3.3% / +1.4%)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, ACCENT_GREEN], "center"),
             (["-36% to -40%", "IntLoss Drop"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "center"),
             (["-15.5% / -7.0% / -16.5%", "Canvas Pixel MSE"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "center"),
+        ],
+        [
+            (["Stage 3: Reality-Anchored", "(Natural MNIST All 10k & Hard 5%)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "left"),
+            (["Relaxed E + G (Anchored)", "(No wrong-class E reinforcement)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
+            (["8.0 steps on Hard 5%", "(95% low-loss: 0.04 steps)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "center"),
+            (["98.07% (All 10k)", "73.00% (Hard 5% Tail)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, ACCENT_BLUE], "center"),
+            (["98.00% (All 10k)", "71.60% (+7.0% vs Stage 2)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, ACCENT_GREEN], "center"),
+            (["-34% to -38%", "IntLoss Drop"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "center"),
+            (["Beats 256→64→32 (97.93%)", "with 60% fewer params"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
+        ],
+        [
+            (["Stage 3: Reality-Anchored", "(Fence / Blackout / Clutter)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "left"),
+            (["Anchored E + G Trajectory", "(Judged by E_anc / E_frozen)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "center"),
+            (["3.6 / 4.6 / 2.9 steps", "(Unbounded Convergence)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_PURPLE, TEXT_MUTED], "center"),
+            (["74.4% / 61.3% / 86.8%"], [fonts["cell"]], [TEXT_MAIN], "center"),
+            (["75.0% / 64.4% / 87.6%", "(+0.7% / +3.1% / +0.8%)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, ACCENT_GREEN], "center"),
+            (["-35% to -41%", "IntLoss Drop"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "center"),
+            (["-14.6% / -8.0% / -14.1%", "Canvas Pixel MSE"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "center"),
         ],
     ]
 
@@ -418,13 +418,13 @@ def render_table3(fonts) -> Image.Image:
 
     draw.text(
         (margin_x, margin_top),
-        "Table 3 — 3-Stage Dual-Cut Pipeline: Gradual Layer Discovery (E) & Internal-Loss Diffusion Loop (G)",
+        "Table 3 — 4-Stage Dual-Cut Pipeline: Gradual Discovery, Frozen-E Diffusion & Reality-Anchored Relaxation",
         fill=TEXT_MAIN,
         font=fonts["title"],
     )
     draw.text(
         (margin_x, margin_top + 46),
-        "11 derives itself at L = 3 via round(sqrt(12/10)*10) = 11 and reaches the midpoint fixed point round(sqrt(11/10)*10) = 10",
+        "11 derives itself at L = 3 via round(sqrt(12/10)*10) = 11; Reality-Anchored Joint Relaxation reaches 98.07% on MNIST & 87.57% on Clutter",
         fill=TEXT_MUTED,
         font=fonts["subtitle"],
     )
@@ -464,7 +464,7 @@ def render_table3(fonts) -> Image.Image:
     fy = t_top + header_h + len(rows) * row_h + 18
     draw.text(
         (margin_x, fy),
-        "Stage 1 E [2352, 105, 32, 11, 10] is permanently frozen; Stage 2 G [10+11, 32, 105, 287, 784] redraws from actual recognition vectors until convergence.",
+        "Anchoring E so it only reinforces valid redraws prevents self-confirming Judge Drift; residual L_internal signals when to defer to the human in the loop.",
         fill=ACCENT_BLUE,
         font=fonts["footer"],
     )
