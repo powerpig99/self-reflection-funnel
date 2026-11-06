@@ -6,7 +6,7 @@ This document specifies the four-stage architecture and training workflow for **
 
 1. **The Implied Command Is Fixed by the Problem Statement (`d_out = 10`)**:
    - A raw image `X ∈ ℝ²³⁵²` (`28 × 28` pixels × `3` coordinates `(x, y, I)` in `[0, 255]³`) carries only sensory payload (`V`). The instruction—*"recognize this picture as one of the 10 digits `0–9`"*—is decided by the problem statement itself (`d_out = 10`).
-   - Because the command is fixed by the problem statement, `O(N²)` token-to-token self-attention across pixels is unnecessary; self-attention is a special case of **self-reflection** (extracting the low-dimensional abstraction of an input and applying it back onto the input's own high-dimensional payload).
+   - Because the command is fixed by the problem statement, `O(N²)` token-to-token self-attention across pixels is unnecessary; we propose that self-attention is a special case of **self-reflection** (extracting the low-dimensional abstraction of an input and applying it back onto the input's own high-dimensional payload).
 
 2. **Asymmetry Between Abstraction (`E`) and Expression (`G`)**:
    - **Abstraction (`E: X → Z`)** is many-to-one lossy compression: it strips away irrelevant local variance via `Linear + ReLU` cuts.
@@ -14,24 +14,24 @@ This document specifies the four-stage architecture and training workflow for **
 
 ## Stage 1: Gradual Supervised Recognition Discovery (`E`), Then Freeze
 
-Instead of guessing hidden layer counts or widths (`256, 64, 32`) or pre-building a multi-layer cascade upfront (which introduces Image lag), `E` starts directly at `2,352 → 10` (`L = 0`) and refines one cut at a time from the **actual discovered width `d*_{l-1}`**:
+Instead of guessing hidden layer counts or widths (`256, 64, 32`) or pre-building a multi-layer cascade upfront (which introduces Image lag), `E` starts directly at `2,352 → 10` (`L = 0`) and refines one cut at a time from the **actual discovered width `d*_{l-1}`** on held-out `train[:4000]`:
 
 1. **Midpoint Split Rule (`d_out = 10`)**:
    - At step `l ≥ 1`, split the remaining gap between the previously discovered bottom hidden width `d*_{l-1}` (with `d*_0 = 2,352`) and `d_out = 10` at the multiplicative midpoint:
      $$D_{\text{init}}(l) = \text{round}\!\left(\sqrt{\frac{d^*_{l-1}}{10}} \cdot 10\right)$$
 2. **Supervised Label Loss Across All Cuts**:
-   - Train `E` on clean training digits using output cross-entropy at the terminal `10` layer (`CE(softmax(u_{10}), y)`) plus supervised label-group orthogonality (`latent_group_orthogonality_grad(z_l, y)`) at every hidden `ReLU` cut `z_l`.
-3. **Zero-Floor Elastic Breathing (`min_width = 1`)**:
+   - Train `E` on clean training digits (`train[4000:]`) using output cross-entropy at the terminal `10` layer (`CE(softmax(u_{10}), y)`) plus supervised label-group orthogonality (`latent_group_orthogonality_grad(z_l, y)`) at every hidden `ReLU` cut `z_l`.
+3. **Zero-Floor Elastic Breathing (`min_width = 1` on Held-Out `train[:4000]`)**:
    - **Collapse on Sufficiency**: Fold collinear cones (`cos(z_j, z_k) ≥ 0.90`) into a single neuron by summing their scaled outgoing weights (`W_{l+1}[j, :] += (rms(z_k)/rms(z_j)) W_{l+1}[k, :]`), and prune spent scaffolding neurons whose downstream contribution energy `E_j = E[z_j²] · ‖W_{l+1}[j, :]‖₂²` falls below `5%` of the layer mean.
    - **Expand on Insufficiency**: If a layer has zero redundant or low-energy slack left (`100%` saturation), allocate `+round(sqrt(d_l / 10))` orthogonal neurons in the nullspace of `W_l`.
-4. **Mathematical Fixed-Point Termination (`11` Emerges Naturally)**:
+4. **Mathematical Fixed-Point Termination (`run_elastic_funnel.py` → `results/elastic_funnel_results.json`)**:
    - **`L = 0`**: `[2352, 10]` → `Head Acc: 92.59%`, `Internal Loss: 0.1492`, `Off-Diag Cos: 0.2231`. Next midpoint: `round(sqrt(2352 / 10) * 10) = 153`.
-   - **`L = 1`**: `[2352, 153, 10]` → collapses to **`[2352, 121, 10]`** (`Head Acc: 97.56%`, `Internal Loss: 0.1402`, `Off-Diag Cos: 0.1433`). Next midpoint from discovered `121`: `round(sqrt(121 / 10) * 10) = 35`.
-   - **`L = 2`**: `[2352, 153, 35, 10]` → collapses to **`[2352, 121, 12, 10]`** (`Head Acc: 97.41%`, `Proto Acc: 97.34%`, `Internal Loss: 0.0747`, `Off-Diag Cos: 0.0253`). Next midpoint from discovered `12`: `round(sqrt(12 / 10) * 10) = 11`.
-   - **`L = 3`**: `[2352, 153, 35, 11, 10]` → collapses to **`[2352, 105, 32, 11, 10]`** (`Head Acc: 97.67%`, `Proto Acc: 97.58%`, `Internal Loss: 0.0595`, `Off-Diag Cos: 0.0191`, `250,940` parameters—`60%` smaller than the legacy `620,864`-parameter network).
-   - At `d*_3 = 11`, the midpoint formula gives `round(sqrt(11 / 10) * 10) = 10 == d_out`: no further gap exists. Notice that **`11` derived itself naturally** (`10` pure digit cones + `1` shared bridge/uncertainty axis) without ever being prescribed.
+   - **`L = 1`**: `[2352, 153, 10]` → contracts to **`[2352, 121, 10]`** (`Head Acc: 97.56%`, `Internal Loss: 0.1402`, `Off-Diag Cos: 0.1433`). Next midpoint from discovered `121`: `round(sqrt(121 / 10) * 10) = 35`.
+   - **`L = 2`**: `[2352, 153, 35, 10]` → contracts to **`[2352, 121, 12, 10]`** (`Head Acc: 97.41%`, `Proto Acc: 97.34%`, `Internal Loss: 0.0747`, `Off-Diag Cos: 0.0253`). Next midpoint from discovered `12`: `round(sqrt(12 / 10) * 10) = 11`.
+   - **`L = 3`**: `[2352, 153, 35, 11, 10]` → breathes through `[2352, 105, 32, 13, 10]` and settles at **`[2352, 105, 32, 11, 10]`** (`Head Acc: 97.67%`, `Proto Acc: 97.58%`, `Internal Loss: 0.0595`, `Off-Diag Cos: 0.0191`, `250,940` parameters—`59.6%` smaller than the `621,226`-parameter `2,352 → 256 → 64 → 32 → 10` network with biases included, or `620,864` weights-only).
+   - At `d*_3 = 11`, the midpoint formula gives `round(sqrt(11 / 10) * 10) = 10 == d_out`: no further gap exists.
 5. **Freeze for Stage 2**:
-   - Once `[2352, 105, 32, 11, 10]` is discovered and anchored on supervised label loss, **all weights of `E` are frozen (`E_frozen`)** so `G` can learn against a stationary reference in Stage 2.
+   - Once `[2352, 105, 32, 11, 10]` is discovered and anchored on supervised label loss (`97.36%` Step-0 accuracy after 4 clean+diffusion anchoring epochs), **all weights of `E` are frozen (`E_frozen`)** so `G` can learn against a stationary reference in Stage 2.
 
 ## Stage 2: Reverse-Diffusion Generator (`G`) Trained by Iterative Redraw Against Frozen `E`
 
@@ -50,20 +50,21 @@ Instead of guessing hidden layer counts or widths (`256, 64, 32`) or pre-buildin
 
 ## Stage 3: Reality-Anchored Joint Supervised Relaxation of `E` and `G`
 
-Once `E` has learned recognition (Stage 1) and `G` has learned reverse-diffusion redrawing against frozen `E` (Stage 2), we **relax (unfreeze) both `E` and `G`** and train the whole closed-loop network end-to-end supervised:
+Once `E` has learned recognition (Stage 1) and `G` has learned reverse-diffusion redrawing against frozen `E` (Stage 2), we **relax (unfreeze) both `E` and `G`** and train the whole closed-loop network end-to-end supervised (`run_diffusion_reflection.py` → `results/diffusion_reflection_results.json`):
 
-1. **Why Unconstrained Co-Adaptation Causes "Judge Drift"**:
-   - If `E` is unconditionally trained to assign the true label `y` to every redrawn canvas `X^{(1)}`—even on samples where `E(X^(0))` guessed the wrong class and `G` redrew the wrong digit—`E` bends its decision boundary to validate `G`'s wrong-class hallucinations (`Picket Fence` drops from `75.69%` to `72.03%`, and `15.9` steps of self-confirming drift lower accuracy on borderline natural digits).
-2. **The Reality Anchor (`Stage 3A / 3B`)**:
+1. **Why Unconstrained Co-Adaptation Causes "Judge Drift" (`stage3_unconstrained_relaxed_E_G`)**:
+   - When `E` is unconditionally trained to assign the true label `y` to every redrawn canvas `X^{(1)}`—even on samples where `E(X^(0))` guessed the wrong class and `G` redrew the wrong digit—`E` bends its decision boundary to validate `G`'s wrong-class hallucinations: Picket Fence accuracy drops from `75.69%` (Stage 2) down to `66.83%` (`-8.86%`), and `15.78` steps of self-confirming drift lower accuracy on the hardest `5%` natural digits (`71.40% → 70.20%`).
+2. **The Reality Anchor (`Stage 3A` & `Stage 3B`) and Same-Width Baseline (`same_stream_baselines_22ep`)**:
    - During joint relaxation, `E` updates on real inputs (`X_clean` and `X^{(0)}`) and reinforces the redrawn canvas `X^{(1)}` **only when the initial recognition `E(X^{(0)})` matched the true label `y`**, while `G` is always corrected toward `y`.
-   - This prevents `E` from flattering `G`'s errors while allowing `E` and `G` to co-align their valid basins—lifting Natural MNIST to **`98.07%` (`Step 0`) / `98.00%` (`Converged`)** (`73.00%` on the hardest `5%` tail), **Heavy Clutter** to **`87.57%`**, **Picket Fence** to **`75.02%`**, and **Center Blackout** to **`64.40%`**.
+   - In our primary **Stage 3A** configuration (judged by stationary `E_frozen`), this lifts Natural MNIST to **`98.00%` (`Step 0`) / `97.94%` (`Converged`)** (`71.20%` Step 0 / `70.00%` Converged on the hardest `5%` tail), **Picket Fence** to **`75.84%`** (`+1.61%` loop gain), **Center Blackout** to **`61.75%`** (`+2.53%` loop gain; `62.40%` / `+3.18%` in self-judged Stage 3B), and **Heavy Clutter** to **`87.72%`** (`+0.65%` loop gain).
+   - Compared against a **Same-Width Standard MLP (`784 → 105 → 32 → 11 → 10`)** trained on the exact same corruption stream for the same 22 epochs (`97.51%` Natural, `64.60%` Fence, `65.42%` Blackout, `83.30%` Clutter), Stage 3A beats the same-width MLP by **`+0.49%` on Natural MNIST**, **`+11.24%` on Picket Fence**, and **`+4.42%` on Heavy Clutter**, while matching a `2.5×` larger `256 → 64 → 32` network (`98.03%` Natural) with `59.6%` fewer parameters.
 
 ## Stage 4: Test-Time Diffusion Gated by Internal Loss & The Human in the Loop
 
 At test time, both `E` and `G` remain **100% frozen** (zero retraining):
 
 1. **Gate by Internal Loss (`L_internal`)**:
-   - Inputs with low internal loss (`L_internal ≤ τ_gate`) exit immediately at Step 0 (`0` diffusion steps).
+   - Inputs with low internal loss (`L_internal ≤ τ_gate`) exit immediately at Step 0 (`95%` of natural digits take `0.00` mean steps in Stage 3B and `0.16` in Stage 3A).
 2. **Self-Terminating Redraw Loop Until Recognition Vectors Converge (`E(G(z*)) = z*`)**:
    - Uncertain inputs (`L_internal > τ_gate`) iterate $Z^{(k)} = E(X^{(k)}) \to X^{(k+1)} = \text{Redraw}(X^{(k)}, G(Z^{(k)})) \to Z^{(k+1)} = E(X^{(k+1)})$ in an unbounded `while` loop, accepting steps only while `L_internal` strictly decreases and halting when the recognized vectors converge (`‖z^{(k+1)} - z^{(k)}‖_2 ≤ ε`).
 3. **Why the Human in the Loop Remains Essential**:
