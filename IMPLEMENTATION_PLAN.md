@@ -5,8 +5,9 @@ This document specifies the four-stage architecture and training workflow for **
 ## Core Principles
 
 1. **The Implied Command Is Fixed by the Problem Statement (`d_out = 10`)**:
-   - A raw image `X ∈ ℝ²³⁵²` (`28 × 28` pixels × `3` coordinates `(x, y, I)` in `[0, 255]³`) carries only sensory payload (`V`). The instruction—*"recognize this picture as one of the 10 digits `0–9`"*—is decided by the problem statement itself (`d_out = 10`).
+   - A raw image carries only sensory payload (`V`). The instruction—*"recognize this picture as one of the 10 digits `0–9`"*—is decided by the problem statement itself (`d_out = 10`).
    - Because the command is fixed by the problem statement, `O(N²)` token-to-token self-attention across pixels is unnecessary; we propose that self-attention is a special case of **self-reflection** (extracting the low-dimensional abstraction of an input and applying it back onto the input's own high-dimensional payload).
+   - **When Vector Slot Order Already Encodes `(x, y)`**: In a dense linear cut $u = \sum_{i=1}^{784} I_i w_i + b$ on a fixed `28×28` grid, each pixel index $i \in \{0, \dots, 783\}$ has its own dedicated weight row $w_i \in \mathbb{R}^{d_1}$, so $x_i I_i w_{i,x} + y_i I_i w_{i,y} + I_i w_{i,I} = I_i(x_i w_{i,x} + y_i w_{i,y} + w_{i,I})$ spans the exact same per-pixel linear subspace as $I_i$ alone. Passing the `784` ordered intensities directly eliminates the `3×` Layer-1 parameter expansion (`250,940 → 86,300` or `69,725` parameters) and removes coordinate-norm distortion under Center Blackout, whereas `[0, 255]³` `(x, y, I)` tuples remain useful when evaluating a single model across multiple spatial resolutions (`14×14`, `28×28`, `56×56` in `run_experiment.py`).
 
 2. **Asymmetry Between Abstraction (`E`) and Expression (`G`)**:
    - **Abstraction (`E: X → Z`)** is many-to-one lossy compression: it strips away irrelevant local variance via `Linear + ReLU` cuts.
@@ -14,10 +15,10 @@ This document specifies the four-stage architecture and training workflow for **
 
 ## Stage 1: Gradual Supervised Recognition Discovery (`E`), Then Freeze
 
-Instead of guessing hidden layer counts or widths (`256, 64, 32`) or pre-building a multi-layer cascade upfront (which introduces Image lag), `E` starts directly at `2,352 → 10` (`L = 0`) and refines one cut at a time from the **actual discovered width `d*_{l-1}`** on held-out `train[:4000]`:
+Instead of guessing hidden layer counts or widths (`256, 64, 32`) or pre-building a multi-layer cascade upfront (which introduces Image lag), `E` starts directly at `d_in → 10` (`L = 0`) and refines one cut at a time from the **actual discovered width `d*_{l-1}`** on held-out `train[:4000]`:
 
 1. **Midpoint Split Rule (`d_out = 10`)**:
-   - At step `l ≥ 1`, split the remaining gap between the previously discovered bottom hidden width `d*_{l-1}` (with `d*_0 = 2,352`) and `d_out = 10` at the multiplicative midpoint:
+   - At step `l ≥ 1`, split the remaining gap between the previously discovered bottom hidden width `d*_{l-1}` (with `d*_0 = d_in`) and `d_out = 10` at the multiplicative midpoint:
      $$D_{\text{init}}(l) = \text{round}\!\left(\sqrt{\frac{d^*_{l-1}}{10}} \cdot 10\right)$$
 2. **Supervised Label Loss Across All Cuts**:
    - Train `E` on clean training digits (`train[4000:]`) using output cross-entropy at the terminal `10` layer (`CE(softmax(u_{10}), y)`) plus supervised label-group orthogonality (`latent_group_orthogonality_grad(z_l, y)`) at every hidden `ReLU` cut `z_l`.
@@ -25,39 +26,44 @@ Instead of guessing hidden layer counts or widths (`256, 64, 32`) or pre-buildin
    - **Collapse on Sufficiency**: Fold collinear cones (`cos(z_j, z_k) ≥ 0.90`) into a single neuron by summing their scaled outgoing weights (`W_{l+1}[j, :] += (rms(z_k)/rms(z_j)) W_{l+1}[k, :]`), and prune spent scaffolding neurons whose downstream contribution energy `E_j = E[z_j²] · ‖W_{l+1}[j, :]‖₂²` falls below `5%` of the layer mean.
    - **Expand on Insufficiency**: If a layer has zero redundant or low-energy slack left (`100%` saturation), allocate `+round(sqrt(d_l / 10))` orthogonal neurons in the nullspace of `W_l`.
 4. **Mathematical Fixed-Point Termination (`run_elastic_funnel.py` → `results/elastic_funnel_results.json`)**:
-   - **`L = 0`**: `[2352, 10]` → `Head Acc: 92.59%`, `Internal Loss: 0.1492`, `Off-Diag Cos: 0.2231`. Next midpoint: `round(sqrt(2352 / 10) * 10) = 153`.
-   - **`L = 1`**: `[2352, 153, 10]` → contracts to **`[2352, 121, 10]`** (`Head Acc: 97.56%`, `Internal Loss: 0.1402`, `Off-Diag Cos: 0.1433`). Next midpoint from discovered `121`: `round(sqrt(121 / 10) * 10) = 35`.
-   - **`L = 2`**: `[2352, 153, 35, 10]` → contracts to **`[2352, 121, 12, 10]`** (`Head Acc: 97.41%`, `Proto Acc: 97.34%`, `Internal Loss: 0.0747`, `Off-Diag Cos: 0.0253`). Next midpoint from discovered `12`: `round(sqrt(12 / 10) * 10) = 11`.
-   - **`L = 3`**: `[2352, 153, 35, 11, 10]` → breathes through `[2352, 105, 32, 13, 10]` and settles at **`[2352, 105, 32, 11, 10]`** (`Head Acc: 97.67%`, `Proto Acc: 97.58%`, `Internal Loss: 0.0595`, `Off-Diag Cos: 0.0191`, `250,940` parameters—`59.6%` smaller than the `621,226`-parameter `2,352 → 256 → 64 → 32 → 10` network with biases included, or `620,864` weights-only).
-   - At `d*_3 = 11`, the midpoint formula gives `round(sqrt(11 / 10) * 10) = 10 == d_out`: no further gap exists.
+   - **On `2,352` coupled `(x, y, I)` tuples (`2,352 → 10`)**:
+     - **`L = 0`**: `[2352, 10]` → `Head Acc: 92.59%`, `Internal Loss: 0.1492`, `Off-Diag Cos: 0.2231`. Next midpoint: `153`.
+     - **`L = 1`**: `[2352, 153, 10]` → contracts to **`[2352, 121, 10]`** (`Head Acc: 97.56%`, `Internal Loss: 0.1402`, `Off-Diag Cos: 0.1433`). Next midpoint: `35`.
+     - **`L = 2`**: `[2352, 153, 35, 10]` → contracts to **`[2352, 121, 12, 10]`** (`Head Acc: 97.41%`, `Proto Acc: 97.34%`, `Internal Loss: 0.0747`, `Off-Diag Cos: 0.0253`). Next midpoint: `11`.
+     - **`L = 3`**: `[2352, 153, 35, 11, 10]` → breathes through `[2352, 105, 32, 13, 10]` and settles at **`[2352, 105, 32, 11, 10]`** (`Head Acc: 97.67%`, `Proto Acc: 97.58%`, `Internal Loss: 0.0595`, `Off-Diag Cos: 0.0191`, `250,940` parameters—`59.6%` smaller than the `621,226`-parameter `2,352 → 256 → 64 → 32 → 10` funnel). Next midpoint: `round(sqrt(11 / 10) * 10) = 10 == d_out`.
+   - **On `784` pixel-order intensities (`784 → 10`)**:
+     - **`L = 0`**: `[784, 10]` (`7,850` params) → `Head Acc: 92.54%`. Next midpoint: `89`.
+     - **`L = 1`**: `[784, 89, 10]` → contracts to **`[784, 76, 10]`** (`60,430` params, `Head Acc: 97.64%`). Next midpoint: `28`.
+     - **`L = 2`**: `[784, 89, 28, 10]` → contracts to **`[784, 84, 21, 10]`** (`67,945` params, `Head Acc: 97.50%`, `Proto Acc: 97.36%`). Next midpoint: `14`.
+     - **`L = 3`**: `[784, 89, 28, 14, 10]` → contracts to **`[784, 85, 30, 10, 10]`** (**`69,725` params**, `Head Acc: 97.42%`, `Proto Acc: 97.33%`, `Internal Loss: 0.0601`, `Off-Diag Cos: 0.0171`), where the third hidden layer contracts from `14 → 11 → 10`, landing directly on the exact class count `10`.
 5. **Freeze for Stage 2**:
-   - Once `[2352, 105, 32, 11, 10]` is discovered and anchored on supervised label loss (`97.36%` Step-0 accuracy after 4 clean+diffusion anchoring epochs), **all weights of `E` are frozen (`E_frozen`)** so `G` can learn against a stationary reference in Stage 2.
+   - Once `E` is discovered and anchored on supervised label loss, **all weights of `E` are frozen (`E_frozen`)** so `G` can learn against a stationary reference in Stage 2.
 
 ## Stage 2: Reverse-Diffusion Generator (`G`) Trained by Iterative Redraw Against Frozen `E`
 
-1. **Bridging the Large Gap (`105 → 287 → 784`)**:
-   - In frozen `E` (`2352 → 105 → 32 → 11 → 10`), the adjacent hidden ratios are `~3×` (`10 → 11 → 32 → 105`), whereas jumping from `105` back to `784` pixels is a `7.5×` gap (`22.4×` in `2,352d` tuple space).
-   - Applying the same midpoint rule between `105` and `784` inserts `d_mid = round(sqrt(784 / 105) * 105) = 287`, giving `G` a uniform `~2.7×–2.9×` reverse-diffusion expansion cascade:
-     $$[10 + 11] \longrightarrow 32 \longrightarrow 105 \longrightarrow 287 \longrightarrow 784$$
+1. **Bridging the Large Gap (`d_1 → d_mid → 784`)**:
+   - Jumping from `d_1` (`105` or `85`) back to `784` pixels is a `7.5×–9.2×` gap.
+   - Applying the same midpoint rule between `d_1` and `784` inserts `d_mid = round(sqrt(784 / d_1) * d_1)` (`287` for `d_1 = 105`; `258` for `d_1 = 85`), giving `G` a uniform `~2.7×–2.9×` reverse-diffusion expansion cascade:
+     $$[10 + d_3] \longrightarrow d_2 \longrightarrow d_1 \longrightarrow d_{\text{mid}} \longrightarrow 784$$
 2. **Intrinsic Internal Loss (`L_internal`) Inside `E`**:
    - For any input `X`, `E` computes its **internal loss `L_internal(X)`** without needing an external label:
      $$\mathcal{L}_{\text{internal}}(X) = 0.45\,\underbrace{\bigl(1 - (p_{(1)} - p_{(2)})\bigr)}_{\text{output cone indeterminacy}} + 0.55 \sum_{l=1}^{3} w_l \underbrace{\bigl(1 - \cos(z_l(X), \text{proto}^{(l)}_{\hat{y}})\bigr)}_{\text{internal cone residual}}$$
 3. **Unrolled Redraw-and-Recognize Training on Clean Numbers**:
-   - Starting from clean training numbers `(X_0, y)` perturbed along a forward diffusion schedule `X^{(0)}`:
-   - Pass `X^{(0)}` through **frozen `E`** to obtain the **actual recognition vectors** `Z^{(0)} = (p_{10}^{(0)}, z_3^{(0)}, z_2^{(0)}, z_1^{(0)})` and `L_internal^{(0)}`. (Never feed the ground-truth one-hot label `y` into `G`.)
+   - Pass `X^{(0)}` through **frozen `E`** to obtain the **actual recognition vectors** `Z^{(0)} = (p_{10}^{(0)}, z_3^{(0)}, z_2^{(0)}, z_1^{(0)})` and `L_internal^{(0)}`.
    - `G` uses `Z^{(0)}` to redraw `X^{(1)} = Redraw(X^{(0)}, G(Z^{(0)}), L_internal^{(0)})`.
    - Pass `X^{(1)}` through **frozen `E`** to get the new recognition result `Z^{(1)} = E(X^{(1)})`, measure the supervised recognition loss of `E(X^{(1)})` against the desired label `y`, and backpropagate analytical gradients through frozen `E` into `G` across unrolled steps (`k = 0 → 1 → 2`).
 
-## Stage 3: Reality-Anchored Joint Supervised Relaxation of `E` and `G`
+## Stage 3: Reality-Anchored vs. Single-Variable Unconstrained Joint Relaxation of `E` and `G`
 
 Once `E` has learned recognition (Stage 1) and `G` has learned reverse-diffusion redrawing against frozen `E` (Stage 2), we **relax (unfreeze) both `E` and `G`** and train the whole closed-loop network end-to-end supervised (`run_diffusion_reflection.py` → `results/diffusion_reflection_results.json`):
 
-1. **Why Unconstrained Co-Adaptation Causes "Judge Drift" (`stage3_unconstrained_relaxed_E_G`)**:
-   - When `E` is unconditionally trained to assign the true label `y` to every redrawn canvas `X^{(1)}`—even on samples where `E(X^(0))` guessed the wrong class and `G` redrew the wrong digit—`E` bends its decision boundary to validate `G`'s wrong-class hallucinations: Picket Fence accuracy drops from `75.69%` (Stage 2) down to `66.83%` (`-8.86%`), and `15.78` steps of self-confirming drift lower accuracy on the hardest `5%` natural digits (`71.40% → 70.20%`).
-2. **The Reality Anchor (`Stage 3A` & `Stage 3B`) and Same-Width Baseline (`same_stream_baselines_22ep`)**:
-   - During joint relaxation, `E` updates on real inputs (`X_clean` and `X^{(0)}`) and reinforces the redrawn canvas `X^{(1)}` **only when the initial recognition `E(X^{(0)})` matched the true label `y`**, while `G` is always corrected toward `y`.
-   - In our primary **Stage 3A** configuration (judged by stationary `E_frozen`), this lifts Natural MNIST to **`98.00%` (`Step 0`) / `97.94%` (`Converged`)** (`71.20%` Step 0 / `70.00%` Converged on the hardest `5%` tail), **Picket Fence** to **`75.84%`** (`+1.61%` loop gain), **Center Blackout** to **`61.75%`** (`+2.53%` loop gain; `62.40%` / `+3.18%` in self-judged Stage 3B), and **Heavy Clutter** to **`87.72%`** (`+0.65%` loop gain).
-   - Compared against a **Same-Width Standard MLP (`784 → 105 → 32 → 11 → 10`)** trained on the exact same corruption stream for the same 22 epochs (`97.51%` Natural, `64.60%` Fence, `65.42%` Blackout, `83.30%` Clutter), Stage 3A beats the same-width MLP by **`+0.49%` on Natural MNIST**, **`+11.24%` on Picket Fence**, and **`+4.42%` on Heavy Clutter**, while matching a `2.5×` larger `256 → 64 → 32` network (`98.03%` Natural) with `59.6%` fewer parameters.
+1. **Single-Variable Reality-Anchor Ablation (`stage3_unconstrained_relaxed_E_G` & `stage3a_unconstrained_frozen_judge`)**:
+   - Keeping every learning rate (`E.lr = 4e-4`, `G.lr = 1e-3`), clean update (`0.7`), corrupted update (`0.6`), `G` loss weights (`1.6`, `0.85`), and `X^{(1)}` weight (`0.35`) 100% identical to Stage 3 Anchored and removing *only* the `correct_0` gate (so `E` reinforces every redrawn canvas `X^{(1)}` unconditionally) isolates Judge Drift:
+   - Without `correct_0`, the **hardest 5% natural tail drops `-2.60%` at Step 0** (`71.20% → 68.60%`) and **`-3.20%` (Self-Judged 3B: `69.60% → 66.40%`) / `-1.60%` (Frozen-Judged 3A: `70.00% → 68.40%`) converged**, **Picket Fence drops `-1.81%` (`75.78% → 73.97%` in 3B) / `-1.46%` (`75.84% → 74.38%` in 3A)**, and the self-judged loop takes **`11.63` steps instead of `8.76` steps** on the hardest 5% digits.
+2. **True 1-to-1 Same-Size & Closest-Size Comparisons (`same_stream_baselines_22ep` & `intensity_only_784_funnels`)**:
+   - **At `86,300` parameters (`784 → 105 → 32 → 11 → 10`)**: The pure `784` pixel-order Funnel (`86,300` params) beats the exact same-size `86,300`-parameter Standard MLP (`97.51%` Natural, `64.60%` Fence, `65.42%` Blackout, `83.30%` Clutter) by **`+0.37%` on Natural MNIST** (`97.88%` Step 0 / `97.83%` converged), **`+8.64%` on Picket Fence** (`73.24%`), and **`+3.74%` on Heavy Clutter** (`87.04%`), while improving Center Blackout by **`+2.55%` at Step 0** (`61.77% → 62.98%`) over the `2,352`-tuple funnel.
+   - **At `69,725` parameters (`784 → 85 → 30 → 10 → 10`)**: The discovered `784`-Funnel (`69,725` params) beats the exact same-size `69,725`-parameter Standard MLP (`97.55%` Natural, `74.27%` Fence, `59.74%` Blackout, `82.92%` Clutter) on Natural MNIST (`97.68%` Step 0 / `97.64%` converged), Center Blackout (`+1.48%`: `61.22%` vs. `59.74%`), and Heavy Clutter (`+3.53%`: `86.45%` vs. `82.92%`).
+   - **At `~220k–251k` parameters**: Headline **Stage 3A** (`250,940` params) ties the closest-in-size **`219,818`-parameter Standard MLP** (`784 → 256 → 64 → 32 → 10`, `98.03%` Natural) on Natural MNIST (`98.00%` Step 0 / `97.94%` converged), leads by **`+3.94%` on Picket Fence** (`75.84%` vs. `71.90%`) and **`+1.98%` on Heavy Clutter** (`87.72%` vs. `85.74%`), and trails on Center Blackout (`61.75%` vs. `66.38%`).
 
 ## Stage 4: Test-Time Diffusion Gated by Internal Loss & The Human in the Loop
 

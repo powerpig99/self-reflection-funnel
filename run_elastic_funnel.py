@@ -1,24 +1,19 @@
 #!/usr/bin/env python3
 """
 Stage 1 of Rethinking Determination Funnel Under 'The Dual Cut':
-Gradual Supervised Recognition Discovery (Starting from 2352 -> 10, Zero Pre-Built Cascade).
+Gradual Supervised Recognition Discovery (Starting from d_in -> 10, Zero Pre-Built Cascade).
 
 Key Principles:
 1. Target 10 (The Actual Problem Statement):
    - Keep the terminal `-> 10` layer (`d_out = 10`). Never prescribe `11` or set an artificial
-     `min_width = 10` floor (`min_width = 1`): `11` derives itself naturally from the
-     midpoint refinement (`round(sqrt(12 / 10) * 10) = 11`) and survives with zero pruning.
-
-2. Start at `2352 -> 10` and Refine Gradually from Discovered Widths (Zero Image Lag):
-   - L = 0: Direct cut `2352 -> 10` trained on supervised label loss.
-   - L = 1: Split `2352 -> 10` at `D_init(1) = round(sqrt(2352 / 10) * 10) = 153`
-     (`2352 -> 153 -> 10`) -> breathes to `[2352, 121, 10]`.
-   - L = 2: Split the discovered `121 -> 10` gap at `round(sqrt(121 / 10) * 10) = 35`
-     (`2352 -> 153 -> 35 -> 10`) -> breathes to `[2352, 121, 12, 10]`.
-   - L = 3: Split the discovered `12 -> 10` gap at `round(sqrt(12 / 10) * 10) = 11`
-     (`2352 -> 153 -> 35 -> 11 -> 10`) -> breathes to `[2352, 105, 32, 11, 10]`.
-   - At `d*_3 = 11`, `round(sqrt(11 / 10) * 10) = 10`, reaching the mathematical fixed point
-     of the midpoint rule and confirming Sufficiency at L = 3.
+     `min_width = 10` floor (`min_width = 1`):
+     * Starting from `2,352` coupled `(x, y, I)` tuples (`2352 -> 10`), `L = 3` initializes at
+       `round(sqrt(12 / 10) * 10) = 11`, expands to `13`, and returns to `11` (`[2352, 105, 32, 11, 10]`,
+       `250,940` params), where `round(sqrt(11 / 10) * 10) = 10` terminates discovery.
+     * Starting directly from `784` pixel intensities (`784 -> 10`), where vector slot order already
+       encodes spatial position `(x_i, y_i)`, `L = 3` initializes at `round(sqrt(21 / 10) * 10) = 14`
+       and contracts by 4 units (`14 -> 10`) to `[784, 85, 30, 10, 10]` (`69,725` params), landing
+       directly on the exact class count `10`.
 """
 
 import copy
@@ -44,7 +39,7 @@ def midpoint_width(d_in: int, d_out: int = 10) -> int:
 
 class ElasticFunnel:
     """
-    Variable-depth, variable-width Linear + ReLU Funnel (`2352 -> d_1 -> ... -> d_L -> 10`)
+    Variable-depth, variable-width Linear + ReLU Funnel (`d_in -> d_1 -> ... -> d_L -> 10`)
     trained by supervised label loss at the terminal `10` layer and hidden ReLU cuts,
     with energy-preserving collinear cone folding and spent-scaffolding pruning.
     """
@@ -395,9 +390,9 @@ def evaluate_funnel_metrics(model: ElasticFunnel, x_eval: np.ndarray, y_eval: np
     }
 
 
-def run_gradual_refinement_from_2352_to_10(x_train, y_train, x_test, y_test):
-    print("\n=== Stage 1: Gradual Refinement Starting from 2352 -> 10 (Zero Floor, Supervised Label Loss) ===")
-    d_in = x_train.shape[1]  # 2352
+def _run_gradual_refinement_loop(x_train, y_train, x_test, y_test, lr: float, banner: str):
+    print(f"\n=== {banner} ===")
+    d_in = x_train.shape[1]
     d_out = 10
     val_x = x_train[:4000]
     tr_x, tr_y = x_train[4000:], y_train[4000:]
@@ -413,12 +408,11 @@ def run_gradual_refinement_from_2352_to_10(x_train, y_train, x_test, y_test):
         if depth == 0:
             init_dims = [d_in, d_out]
         else:
-            # Split the remaining gap between the ACTUAL discovered bottom width `d*_{depth-1}` and `10`!
             new_cut_init = midpoint_width(last_discovered_bottom_width, d_out)
             upstream_init_chain.append(new_cut_init)
             init_dims = [d_in] + list(upstream_init_chain) + [d_out]
 
-        model = ElasticFunnel(init_dims, lr=1.6e-3, seed=42)
+        model = ElasticFunnel(init_dims, lr=lr, seed=42)
         init_params = model.param_count
         rng = np.random.default_rng(42)
         bsz = 256
@@ -443,7 +437,7 @@ def run_gradual_refinement_from_2352_to_10(x_train, y_train, x_test, y_test):
                         l_idx,
                         val_x,
                         d_out=d_out,
-                        min_width=1,  # Zero artificial floor—let 11 derive itself naturally!
+                        min_width=1,
                         cos_thresh=0.90,
                         min_rel_energy=0.05,
                         allow_expand=(ep < 9),
@@ -490,20 +484,47 @@ def run_gradual_refinement_from_2352_to_10(x_train, y_train, x_test, y_test):
     return depth_results, optimal_depth, best_model
 
 
+def run_gradual_refinement_from_2352_to_10(x_train, y_train, x_test, y_test):
+    return _run_gradual_refinement_loop(
+        x_train,
+        y_train,
+        x_test,
+        y_test,
+        lr=1.6e-3,
+        banner="Stage 1A: Gradual Refinement Starting from 2352 -> 10 (Coupled Tuple Input, Zero Floor)",
+    )
+
+
+def run_gradual_refinement_from_784_to_10(i_train, y_train, i_test, y_test):
+    return _run_gradual_refinement_loop(
+        i_train,
+        y_train,
+        i_test,
+        y_test,
+        lr=1.8e-3,
+        banner="Stage 1B: Gradual Refinement Starting from 784 -> 10 (Pure Pixel-Order Input, Zero Floor)",
+    )
+
+
 def main():
-    print("Loading MNIST and building 8-bit (x, y, I) in [0, 255]^3 tuple representation...")
+    print("Loading MNIST and building both 2,352-tuple and 784 pixel-order representations...")
     train_img, train_lbl, test_img, test_lbl = load_mnist()
     x_train = build_8bit_tuple_representation(train_img, couple_background=True)
     x_test = build_8bit_tuple_representation(test_img, couple_background=True)
+    i_train = (train_img.astype(np.float32) / 255.0).reshape(len(train_img), 784)
+    i_test = (test_img.astype(np.float32) / 255.0).reshape(len(test_img), 784)
 
     depth_results, opt_depth, _ = run_gradual_refinement_from_2352_to_10(x_train, train_lbl, x_test, test_lbl)
+    depth_results_784, opt_depth_784, _ = run_gradual_refinement_from_784_to_10(i_train, train_lbl, i_test, test_lbl)
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     out_path = RESULTS_DIR / "elastic_funnel_results.json"
     summary = {
-        "refinement_rule": "Start at 2352 -> 10; split each remaining gap d*_{l-1} -> 10 at D_init(l) = round(sqrt(d*_{l-1} / 10) * 10) until round(sqrt(d*_L / 10) * 10) == 10",
+        "refinement_rule": "Start at d_in -> 10; split each remaining gap d*_{l-1} -> 10 at D_init(l) = round(sqrt(d*_{l-1} / 10) * 10) until round(sqrt(d*_L / 10) * 10) == 10",
         "optimal_discovered_depth": opt_depth,
         "gradual_depth_discovery": depth_results,
+        "intensity_only_784_optimal_depth": opt_depth_784,
+        "intensity_only_784_gradual_depth_discovery": depth_results_784,
     }
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)

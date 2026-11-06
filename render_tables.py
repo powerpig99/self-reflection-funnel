@@ -344,12 +344,14 @@ def render_table3(fonts) -> Image.Image:
     with open(RESULTS_DIR / "diffusion_reflection_results.json", "r", encoding="utf-8") as f:
         dres = json.load(f)
 
-    s1 = dres["stage1_gradual_discovery"]
+    s1_784 = dres["stage1_intensity_only_784_gradual_discovery"]["depth_3"]
     s2 = dres["stage2_frozen_E_trained_G"]
     s3u = dres["stage3_unconstrained_relaxed_E_G"]
     s3b = dres["stage3b_reality_anchored_self_judged"]
     s3a = dres["stage3a_reality_anchored_frozen_judge"]
+    f784_same = dres["intensity_only_784_funnels"]["same_size_784_105_32_11_10_stage3a"]
     mlp_same = dres["same_stream_baselines_22ep"]["same_width_std_mlp_784_105_32_11_10"]
+    mlp_large = dres["same_stream_baselines_22ep"]["large_std_mlp_784_256_64_32_10"]
 
     col_widths = [370, 385, 245, 220, 210, 205, 205]
     table_w = sum(col_widths)
@@ -362,28 +364,18 @@ def render_table3(fonts) -> Image.Image:
 
     headers = [
         ["Stage / Model Variant", "(results/diffusion_reflection_results.json)"],
-        ["Architecture / Widths", "(Midpoint Init → Discovered)"],
-        ["Parameters / Exposure", "(Savings & Training Stream)"],
+        ["Architecture / Widths", "(Input & Hidden Cuts)"],
+        ["Parameters / Exposure", "(Exact Size & Stream)"],
         ["Natural MNIST", "(All 10k / Hard 5%)"],
         ["Picket Fence", "(Step 0 → Converged)"],
         ["Center Blackout", "(Step 0 → Converged)"],
         ["Heavy Clutter", "(Step 0 → Converged)"],
     ]
 
-    d3 = s1["depth_3"]
     rows = [
         [
-            (["Stage 1: Discovered E*", "(L = 0 → 1 → 2 → 3 Fixed Pt)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "left"),
-            ([f"{d3['initial_dims']} →", f"{d3['final_discovered_dims']}"], [fonts["mono"], fonts["mono_bold"]], [TEXT_MUTED, ACCENT_GREEN], "center"),
-            ([f"{d3['final_params']:,} params (-59.6%)", "12 Clean Epochs (Stage 1)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
-            ([f"{d3['head_accuracy_pct']:.2f}% (Head)", f"{d3['prototype_accuracy_pct']:.2f}% (Proto)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
-            (["Off-Diag Cos: 0.0191", "IntLoss: 0.0595"], [fonts["cell"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "center"),
-            (["ReLU Cutoffs:", "68.7% / 61.8% / 84.3%"], [fonts["footer"], fonts["cell"]], [TEXT_MUTED, ACCENT_PURPLE], "center"),
-            (["Next Midpoint: 10", "(11→13→11 Fixed Pt)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
-        ],
-        [
-            (["Same-Width Standard MLP", "(No Tuples, No G, No Loop)"], [fonts["cell_bold"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "left"),
-            ([f"{mlp_same['dims']}", "(I-Only, Output CE Only)"], [fonts["mono"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "center"),
+            (["Same-Size 86.3k Std MLP", "(No G, No Loop, Output CE)"], [fonts["cell_bold"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "left"),
+            ([f"{mlp_same['dims']}", "(784 Pixel-Order Input)"], [fonts["mono"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "center"),
             ([f"{mlp_same['params']:,} params", "Same 22-Ep Corr Stream"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "center"),
             ([f"{mlp_same['natural_mnist_acc_pct']:.2f}%", "(Single Pass)"], [fonts["cell_bold"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "center"),
             ([f"{mlp_same['picket_fence_acc_pct']:.2f}%", "(Single Pass)"], [fonts["cell"], fonts["footer"]], [ACCENT_RED, TEXT_MUTED], "center"),
@@ -391,27 +383,45 @@ def render_table3(fonts) -> Image.Image:
             ([f"{mlp_same['heavy_clutter_acc_pct']:.2f}%", "(Single Pass)"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "center"),
         ],
         [
-            (["Stage 2: Frozen E + Trained G", "(G Trained Against Frozen E)"], [fonts["cell_bold"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "left"),
-            (["G: [10+11, 32, 105, 287, 784]", "(Midpoint 287 bridges 105→784)"], [fonts["mono"], fonts["footer"]], [ACCENT_PURPLE, TEXT_MUTED], "center"),
-            (["E Frozen (16 Ep)", "G Redraw (10 Ep)"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "center"),
+            (["Same-Size 86.3k 784-Funnel", "(Pure 784 Pixel-Order, 3A)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "left"),
+            ([f"{f784_same['dims']}", "(1:1 Param Parity w/ MLP)"], [fonts["mono_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
+            ([f"{f784_same['params']:,} params (E)", f"784-Disc: {s1_784['final_params']:,} (14→10)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
+            ([f"{f784_same['natural_mnist']['all_10k_step0_acc_pct']:.2f}% → {f784_same['natural_mnist']['all_10k_converged_acc_pct']:.2f}%", f"Hard 5%: {f784_same['natural_mnist']['high_loss_5pct_step0_acc_pct']:.2f}% → {f784_same['natural_mnist']['high_loss_5pct_converged_acc_pct']:.2f}%"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
+            ([f"{f784_same['occlusions_converged']['picket_fence']['step0_acc_pct']:.2f}% → {f784_same['occlusions_converged']['picket_fence']['converged_acc_pct']:.2f}%", f"(+8.64% vs 86.3k MLP)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, ACCENT_GREEN], "center"),
+            ([f"{f784_same['occlusions_converged']['center_blackout']['step0_acc_pct']:.2f}% → {f784_same['occlusions_converged']['center_blackout']['converged_acc_pct']:.2f}%", f"({f784_same['occlusions_converged']['center_blackout']['loop_gain_pct']:+.2f}%, {f784_same['occlusions_converged']['center_blackout']['mean_steps']:.1f} steps)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
+            ([f"{f784_same['occlusions_converged']['heavy_clutter']['step0_acc_pct']:.2f}% → {f784_same['occlusions_converged']['heavy_clutter']['converged_acc_pct']:.2f}%", f"(+3.74% vs 86.3k MLP)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, ACCENT_GREEN], "center"),
+        ],
+        [
+            (["Closest-Size 220k Std MLP", "(No G, No Loop, Output CE)"], [fonts["cell_bold"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "left"),
+            ([f"{mlp_large['dims']}", "(784 Pixel-Order Input)"], [fonts["mono"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "center"),
+            ([f"{mlp_large['params']:,} params", "Same 22-Ep Corr Stream"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "center"),
+            ([f"{mlp_large['natural_mnist_acc_pct']:.2f}%", "(Single Pass)"], [fonts["cell_bold"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "center"),
+            ([f"{mlp_large['picket_fence_acc_pct']:.2f}%", "(Single Pass)"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "center"),
+            ([f"{mlp_large['center_blackout_acc_pct']:.2f}%", "(Single Pass)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "center"),
+            ([f"{mlp_large['heavy_clutter_acc_pct']:.2f}%", "(Single Pass)"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "center"),
+        ],
+        [
+            (["Stage 2: Frozen E + Trained G", "(2,352 Tuple Funnel, Frozen E)"], [fonts["cell_bold"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "left"),
+            (["E: [2352, 105, 32, 11, 10]", "G: [10+11, 32, 105, 287, 784]"], [fonts["mono"], fonts["footer"]], [ACCENT_PURPLE, TEXT_MUTED], "center"),
+            (["250,940 params (E)", "(-59.6% vs 621k Funnel)"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "center"),
             ([f"{s2['natural_mnist']['all_10k_step0_acc_pct']:.2f}% → {s2['natural_mnist']['all_10k_converged_acc_pct']:.2f}%", f"Hard 5%: {s2['natural_mnist']['high_loss_5pct_step0_acc_pct']:.2f}% → {s2['natural_mnist']['high_loss_5pct_converged_acc_pct']:.2f}%"], [fonts["cell_bold"], fonts["footer"]], [TEXT_MAIN, ACCENT_GREEN], "center"),
             ([f"{s2['occlusions_converged']['picket_fence']['step0_acc_pct']:.2f}% → {s2['occlusions_converged']['picket_fence']['converged_acc_pct']:.2f}%", f"({s2['occlusions_converged']['picket_fence']['loop_gain_pct']:+.2f}%, {s2['occlusions_converged']['picket_fence']['mean_steps']:.1f} steps)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
             ([f"{s2['occlusions_converged']['center_blackout']['step0_acc_pct']:.2f}% → {s2['occlusions_converged']['center_blackout']['converged_acc_pct']:.2f}%", f"({s2['occlusions_converged']['center_blackout']['loop_gain_pct']:+.2f}%, {s2['occlusions_converged']['center_blackout']['mean_steps']:.1f} steps)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
             ([f"{s2['occlusions_converged']['heavy_clutter']['step0_acc_pct']:.2f}% → {s2['occlusions_converged']['heavy_clutter']['converged_acc_pct']:.2f}%", f"({s2['occlusions_converged']['heavy_clutter']['loop_gain_pct']:+.2f}%, {s2['occlusions_converged']['heavy_clutter']['mean_steps']:.1f} steps)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
         ],
         [
-            (["Stage 3 Unconstrained", "(No Reality Anchor → Drift)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_RED, TEXT_MUTED], "left"),
-            (["Relaxed E + G (Unconditional)", "(E reinforces wrong X^(1))"], [fonts["cell"], fonts["footer"]], [ACCENT_RED, TEXT_MUTED], "center"),
-            (["22 Ep Exposure", "(15.8 steps on Hard 5%)"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, ACCENT_RED], "center"),
-            ([f"{s3u['natural_mnist']['all_10k_step0_acc_pct']:.2f}% → {s3u['natural_mnist']['all_10k_converged_acc_pct']:.2f}%", f"Hard 5%: {s3u['natural_mnist']['high_loss_5pct_step0_acc_pct']:.2f}% → {s3u['natural_mnist']['high_loss_5pct_converged_acc_pct']:.2f}%"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "center"),
-            ([f"{s3u['occlusions_converged']['picket_fence']['step0_acc_pct']:.2f}% → {s3u['occlusions_converged']['picket_fence']['converged_acc_pct']:.2f}%", f"(-8.86% Judge Drift!)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_RED, ACCENT_RED], "center"),
+            (["Stage 3 Unconstrained (1-Var)", "(Only `correct_0` Gate Removed)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_RED, TEXT_MUTED], "left"),
+            (["Relaxed E + G (No Anchor)", "(Same LRs & Weights as 3B/3A)"], [fonts["cell"], fonts["footer"]], [ACCENT_RED, TEXT_MUTED], "center"),
+            (["250,940 params (E)", f"({s3u['natural_mnist']['high_loss_5pct_mean_steps']:.1f} steps on Hard 5%)"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, ACCENT_RED], "center"),
+            ([f"{s3u['natural_mnist']['all_10k_step0_acc_pct']:.2f}% → {s3u['natural_mnist']['all_10k_converged_acc_pct']:.2f}%", f"Hard 5%: {s3u['natural_mnist']['high_loss_5pct_step0_acc_pct']:.2f}% → {s3u['natural_mnist']['high_loss_5pct_converged_acc_pct']:.2f}%"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, ACCENT_RED], "center"),
+            ([f"{s3u['occlusions_converged']['picket_fence']['step0_acc_pct']:.2f}% → {s3u['occlusions_converged']['picket_fence']['converged_acc_pct']:.2f}%", "(-1.81% vs 3B / -1.46% in 3A)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_RED, ACCENT_RED], "center"),
             ([f"{s3u['occlusions_converged']['center_blackout']['step0_acc_pct']:.2f}% → {s3u['occlusions_converged']['center_blackout']['converged_acc_pct']:.2f}%", f"({s3u['occlusions_converged']['center_blackout']['loop_gain_pct']:+.2f}%, {s3u['occlusions_converged']['center_blackout']['mean_steps']:.1f} steps)"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "center"),
             ([f"{s3u['occlusions_converged']['heavy_clutter']['step0_acc_pct']:.2f}% → {s3u['occlusions_converged']['heavy_clutter']['converged_acc_pct']:.2f}%", f"({s3u['occlusions_converged']['heavy_clutter']['loop_gain_pct']:+.2f}%, {s3u['occlusions_converged']['heavy_clutter']['mean_steps']:.1f} steps)"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "center"),
         ],
         [
             (["Stage 3B Reality-Anchored", "(Self-Judged by E_anc)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "left"),
             (["Relaxed E + G (Anchored)", "(Only valid X^(1) reinforced)"], [fonts["cell"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "center"),
-            (["22 Ep Exposure", "(95% clean: 0.00 steps)"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, ACCENT_GREEN], "center"),
+            (["250,940 params (E)", f"({s3b['natural_mnist']['high_loss_5pct_mean_steps']:.1f} steps on Hard 5%)"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, ACCENT_GREEN], "center"),
             ([f"{s3b['natural_mnist']['all_10k_step0_acc_pct']:.2f}% → {s3b['natural_mnist']['all_10k_converged_acc_pct']:.2f}%", f"Hard 5%: {s3b['natural_mnist']['high_loss_5pct_step0_acc_pct']:.2f}% → {s3b['natural_mnist']['high_loss_5pct_converged_acc_pct']:.2f}%"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
             ([f"{s3b['occlusions_converged']['picket_fence']['step0_acc_pct']:.2f}% → {s3b['occlusions_converged']['picket_fence']['converged_acc_pct']:.2f}%", f"({s3b['occlusions_converged']['picket_fence']['loop_gain_pct']:+.2f}%, {s3b['occlusions_converged']['picket_fence']['mean_steps']:.1f} steps)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
             ([f"{s3b['occlusions_converged']['center_blackout']['step0_acc_pct']:.2f}% → {s3b['occlusions_converged']['center_blackout']['converged_acc_pct']:.2f}%", f"({s3b['occlusions_converged']['center_blackout']['loop_gain_pct']:+.2f}%, {s3b['occlusions_converged']['center_blackout']['mean_steps']:.1f} steps)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
@@ -420,7 +430,7 @@ def render_table3(fonts) -> Image.Image:
         [
             (["Stage 3A Reality-Anchored", "(Judged by Stage-1 E_frozen)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "left"),
             (["Relaxed E + G (Headline 3A)", "(Stationary E_frozen Judge)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
-            (["250,940 params (E)", "(95% clean: 0.16 steps)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
+            (["250,940 params (E)", f"({s3a['natural_mnist']['high_loss_5pct_mean_steps']:.1f} steps on Hard 5%)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
             ([f"{s3a['natural_mnist']['all_10k_step0_acc_pct']:.2f}% → {s3a['natural_mnist']['all_10k_converged_acc_pct']:.2f}%", f"Hard 5%: {s3a['natural_mnist']['high_loss_5pct_step0_acc_pct']:.2f}% → {s3a['natural_mnist']['high_loss_5pct_converged_acc_pct']:.2f}%"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, ACCENT_BLUE], "center"),
             ([f"{s3a['occlusions_converged']['picket_fence']['step0_acc_pct']:.2f}% → {s3a['occlusions_converged']['picket_fence']['converged_acc_pct']:.2f}%", f"({s3a['occlusions_converged']['picket_fence']['loop_gain_pct']:+.2f}%, {s3a['occlusions_converged']['picket_fence']['mean_steps']:.1f} steps)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, ACCENT_GREEN], "center"),
             ([f"{s3a['occlusions_converged']['center_blackout']['step0_acc_pct']:.2f}% → {s3a['occlusions_converged']['center_blackout']['converged_acc_pct']:.2f}%", f"({s3a['occlusions_converged']['center_blackout']['loop_gain_pct']:+.2f}%, {s3a['occlusions_converged']['center_blackout']['mean_steps']:.1f} steps)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, ACCENT_GREEN], "center"),
@@ -435,7 +445,7 @@ def render_table3(fonts) -> Image.Image:
 
     draw.text(
         (margin_x, margin_top),
-        "Table 3 — 4-Stage Dual-Cut Pipeline vs. Same-Width Standard MLP & Unconstrained Ablation",
+        "Table 3 — 4-Stage Dual-Cut Pipeline: 784 & 2,352 Funnels vs. Same-Size MLPs & 1-Var Anchor Ablation",
         fill=TEXT_MAIN,
         font=fonts["title"],
     )
@@ -479,10 +489,9 @@ def render_table3(fonts) -> Image.Image:
     draw.rectangle([margin_x, t_top, margin_x + table_w, t_top + header_h + len(rows) * row_h], outline=BORDER_COL, width=2)
 
     fy = t_top + header_h + len(rows) * row_h + 18
-    mlp_l = dres["same_stream_baselines_22ep"]["large_std_mlp_784_256_64_32_10"]
     draw.text(
         (margin_x, fy),
-        f" Stage 3A beats Same-Width MLP (105→32→11) by +11.24% on Fence & +4.42% on Clutter, and matches 2.5× larger 256→64→32 ({mlp_l['natural_mnist_acc_pct']:.2f}% Nat) with 59.6% fewer params.",
+        "At 86,300 params (784→105→32→11→10), 784-Funnel beats 86.3k MLP by +0.37% Nat, +8.64% Fence, +3.74% Clutter; at ~220k–251k, 3A leads 220k MLP by +3.94% Fence & +1.98% Clutter.",
         fill=ACCENT_BLUE,
         font=fonts["footer"],
     )

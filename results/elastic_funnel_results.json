@@ -1,5 +1,5 @@
 {
-  "refinement_rule": "Start at 2352 -> 10; split each remaining gap d*_{l-1} -> 10 at D_init(l) = round(sqrt(d*_{l-1} / 10) * 10) until round(sqrt(d*_L / 10) * 10) == 10",
+  "refinement_rule": "Start at d_in -> 10; split each remaining gap d*_{l-1} -> 10 at D_init(l) = round(sqrt(d*_{l-1} / 10) * 10) until round(sqrt(d*_L / 10) * 10) == 10",
   "optimal_discovered_depth": 3,
   "gradual_depth_discovery": {
     "depth_0": {
@@ -26,7 +26,7 @@
       "off_diag_cos": 0.2231,
       "relu_cutoff_pct_per_layer": [],
       "next_midpoint_to_10": 153,
-      "seconds": 0.82
+      "seconds": 0.77
     },
     "depth_1": {
       "initial_dims": [
@@ -72,7 +72,7 @@
         79.5
       ],
       "next_midpoint_to_10": 35,
-      "seconds": 4.31
+      "seconds": 4.13
     },
     "depth_2": {
       "initial_dims": [
@@ -125,7 +125,7 @@
         82.1
       ],
       "next_midpoint_to_10": 11,
-      "seconds": 4.9
+      "seconds": 4.59
     },
     "depth_3": {
       "initial_dims": [
@@ -185,7 +185,195 @@
         84.3
       ],
       "next_midpoint_to_10": 10,
-      "seconds": 4.93
+      "seconds": 4.82
+    }
+  },
+  "intensity_only_784_optimal_depth": 3,
+  "intensity_only_784_gradual_depth_discovery": {
+    "depth_0": {
+      "initial_dims": [
+        784,
+        10
+      ],
+      "final_discovered_dims": [
+        784,
+        10
+      ],
+      "width_trajectory": [
+        [
+          784,
+          10
+        ]
+      ],
+      "initial_params": 7850,
+      "final_params": 7850,
+      "head_accuracy_pct": 92.54,
+      "prototype_accuracy_pct": 92.54,
+      "ce_loss": 0.268,
+      "mean_internal_loss": 0.1559,
+      "off_diag_cos": 0.1951,
+      "relu_cutoff_pct_per_layer": [],
+      "next_midpoint_to_10": 89,
+      "seconds": 0.44
+    },
+    "depth_1": {
+      "initial_dims": [
+        784,
+        89,
+        10
+      ],
+      "final_discovered_dims": [
+        784,
+        76,
+        10
+      ],
+      "width_trajectory": [
+        [
+          784,
+          89,
+          10
+        ],
+        [
+          784,
+          80,
+          10
+        ],
+        [
+          784,
+          77,
+          10
+        ],
+        [
+          784,
+          76,
+          10
+        ]
+      ],
+      "initial_params": 70765,
+      "final_params": 60430,
+      "head_accuracy_pct": 97.64,
+      "prototype_accuracy_pct": 92.89,
+      "ce_loss": 0.0827,
+      "mean_internal_loss": 0.1387,
+      "off_diag_cos": 0.1407,
+      "relu_cutoff_pct_per_layer": [
+        77.1
+      ],
+      "next_midpoint_to_10": 28,
+      "seconds": 1.47
+    },
+    "depth_2": {
+      "initial_dims": [
+        784,
+        89,
+        28,
+        10
+      ],
+      "final_discovered_dims": [
+        784,
+        84,
+        21,
+        10
+      ],
+      "width_trajectory": [
+        [
+          784,
+          89,
+          28,
+          10
+        ],
+        [
+          784,
+          84,
+          24,
+          10
+        ],
+        [
+          784,
+          84,
+          21,
+          10
+        ],
+        [
+          784,
+          84,
+          21,
+          10
+        ]
+      ],
+      "initial_params": 72675,
+      "final_params": 67945,
+      "head_accuracy_pct": 97.5,
+      "prototype_accuracy_pct": 97.36,
+      "ce_loss": 0.0871,
+      "mean_internal_loss": 0.0786,
+      "off_diag_cos": 0.0371,
+      "relu_cutoff_pct_per_layer": [
+        65.7,
+        79.8
+      ],
+      "next_midpoint_to_10": 14,
+      "seconds": 2.23
+    },
+    "depth_3": {
+      "initial_dims": [
+        784,
+        89,
+        28,
+        14,
+        10
+      ],
+      "final_discovered_dims": [
+        784,
+        85,
+        30,
+        10,
+        10
+      ],
+      "width_trajectory": [
+        [
+          784,
+          89,
+          28,
+          14,
+          10
+        ],
+        [
+          784,
+          85,
+          30,
+          11,
+          10
+        ],
+        [
+          784,
+          88,
+          30,
+          10,
+          10
+        ],
+        [
+          784,
+          85,
+          30,
+          10,
+          10
+        ]
+      ],
+      "initial_params": 72941,
+      "final_params": 69725,
+      "head_accuracy_pct": 97.42,
+      "prototype_accuracy_pct": 97.33,
+      "ce_loss": 0.1003,
+      "mean_internal_loss": 0.0601,
+      "off_diag_cos": 0.0171,
+      "relu_cutoff_pct_per_layer": [
+        67.6,
+        62.9,
+        85.7
+      ],
+      "next_midpoint_to_10": 10,
+      "seconds": 2.81
     }
   }
 }

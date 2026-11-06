@@ -2,41 +2,39 @@
 """
 Complete 4-Stage Pipeline Rethinking Determination Funnel Under 'The Dual Cut':
 
-Stage 1 — Gradual Supervised Recognition Discovery (Starting from `2352 -> 10`, Zero Floor):
-  - Starts at `2352 -> 10` (`L = 0`) and refines the remaining gap `d*_{l-1} -> 10` via
-    `D_init(l) = round(sqrt(d*_{l-1} / 10) * 10)` under supervised label loss:
+Stage 1 — Gradual Supervised Recognition Discovery (Starting from `d_in -> 10`, Zero Floor):
+  - 2,352-Tuple Input (`2352 -> 10`):
       L = 0: [2352, 10]
       L = 1: [2352, 153, 10] -> breathes to [2352, 121, 10]
       L = 2: [2352, 153, 35, 10] -> breathes to [2352, 121, 12, 10]
-      L = 3: [2352, 153, 35, 11, 10] -> breathes to [2352, 105, 32, 11, 10]
-    At `d*_3 = 11` (initialized by `round(sqrt(12 / 10) * 10) = 11`, which expands to `13`
-    and returns to `11`), `round(sqrt(11 / 10) * 10) = 10` (the midpoint fixed point).
-  - All weights of `E` (`[2352, 105, 32, 11, 10]`) are then FROZEN for Stage 2.
+      L = 3: [2352, 153, 35, 11, 10] -> breathes to [2352, 105, 32, 11, 10] (250,940 params,
+             59.6% fewer than the 621,226-param 2,352->256->64->32->10 funnel).
+  - Pure 784 Pixel-Order Input (`784 -> 10`, where vector slot order already encodes `(x_i, y_i)`):
+      L = 0: [784, 10]
+      L = 1: [784, 89, 10] -> breathes to [784, 76, 10]
+      L = 2: [784, 89, 28, 10] -> breathes to [784, 84, 21, 10]
+      L = 3: [784, 89, 28, 14, 10] -> breathes to [784, 85, 30, 10, 10] (69,725 params; the third
+             layer initializes at 14 and contracts by 4 units to 10, terminating discovery).
 
 Stage 2 — Iterative Redraw-and-Recognize Training of `G` on Clean Numbers Against Frozen `E`:
-  - `G` mirrors `E` (`10 + 11 -> 32 -> 105 -> 287 -> 784`), inserting the midpoint layer
-    `287 = round(sqrt(784 / 105) * 105)` across the big gap between `105` and `784`.
-  - Keeping `E` frozen prevents representation collapse while `G` learns to redraw from `E`'s
-    actual recognition vectors `Z^(k) = E(X^(k))` (`k = 0 -> 1 -> 2`).
+  - `G` mirrors `E` (`10 + d3 -> d2 -> d1 -> 287 -> 784`). Keeping `E` frozen prevents
+    representation collapse while `G` learns to redraw from `E`'s recognition vectors.
 
-Stage 3 — Reality-Anchored vs. Unconstrained Joint Supervised Relaxation of `E` and `G`:
-  - Once `E` and `G` are warmed up, we relax both `E` and `G` weights to co-adapt across
-    the closed-loop self-reflection trajectory.
-  - Crucial Reality Anchor (preventing 'Judge Drift' / Echo-Chamber Delusion):
-    If `E` unconditionally learns to assign the true label `y` to every redrawn canvas `X^(1)`—
-    even when `E(X^(0))` guessed the wrong class and `G` redrew the wrong digit (`Stage 3 Unconstrained`)—
-    `E` bends its boundaries to flatter `G`'s wrong-class hallucinations. By anchoring `E` to reality
-    (`X_clean` and `X^(0)`) and updating `E` on `X^(1)` only when `E(X^(0))` matched `y` (while `G`
-    is always corrected toward `y`), `E` reaches `98.00%` on Natural MNIST (`97.94%` converged in 3A),
-    `75.84%` on Picket Fence, and `87.72%` on Heavy Clutter, outperforming a same-width Standard MLP
-    (`784 -> 105 -> 32 -> 11 -> 10`) trained on the same corruption stream for 22 epochs (`97.70%`
-    Natural, `66.90%` Fence, `83.46%` Clutter) and matching a 2.5x larger `256 -> 64 -> 32` network
-    (`621,226` params) with `59.6%` fewer parameters (`250,940`).
+Stage 3 — Reality-Anchored vs. Single-Variable Unconstrained Joint Supervised Relaxation:
+  - Strict single-variable anchor ablation: `Stage 3 Unconstrained` uses the exact same learning
+    rates (`E.lr = 4e-4`, `G.lr = 1e-3`), clean-digit weight (`0.7`), corrupted-input weight (`0.6`),
+    `G` weights (`1.6`, `0.85`), and `X^(1)` weight (`0.35`) as `Stage 3 Anchored`, removing ONLY
+    the `correct_0` gate (`du_1 = (softmax(u_1) - one_hot) * (0.35 / len(xb_c))`).
+  - Removing `correct_0` alone drops the hardest 5% tail by 2.60 points at Step 0 (`71.20% -> 68.60%`)
+    and 1.60 to 3.20 points converged (`69.60% -> 68.00%` self-judged; `70.00% -> 66.80%` frozen-judged),
+    drops Picket Fence by 1.48 to 1.83 points (`75.84% -> 74.36%` in 3A; `75.78% -> 73.95%` in 3B),
+    and forces the self-judged loop to run 11.64 steps instead of 8.81 steps on the hardest 5% digits.
 
-Stage 4 — Test-Time Diffusion Gated by Internal Loss Until Recognized Vectors Converge:
-  - Evaluates Stage 2 (`Frozen E + G`), Stage 3 Unconstrained (`Relaxed E + G`), Stage 3B
-    (`Reality-Anchored E + G`, Self-Judged), and Stage 3A (`Reality-Anchored E + G`, Judged by `E_frozen`),
-    plus Same-Stream Standard MLP baselines (`105->32->11` and `256->64->32`).
+Stage 4 — Test-Time Diffusion Gated by Internal Loss & True Same-Size Baselines:
+  - Evaluates the `2,352`-tuple funnel (`250,940` params), the pure `784` pixel-order funnels
+    (`[784, 105, 32, 11, 10]` at `86,300` params and `[784, 85, 30, 10, 10]` at `69,725` params),
+    and Standard Cross-Entropy MLPs at `[784, 85, 30, 10, 10]` (`69,725` params),
+    `[784, 105, 32, 11, 10]` (`86,300` params), and `[784, 256, 64, 32, 10]` (`219,818` params).
 """
 
 import copy
@@ -61,6 +59,7 @@ from run_elastic_funnel import (
     compute_internal_loss,
     compute_layer_prototypes,
     midpoint_width,
+    run_gradual_refinement_from_784_to_10,
     run_gradual_refinement_from_2352_to_10,
 )
 from run_experiment import (
@@ -79,8 +78,8 @@ ASSETS_DIR = EXP_DIR / "assets"
 
 class ReverseDiffusionGenerator:
     """
-    Reverse-diffusion generator `G` mirroring `E` (`[2352, d1, d2, d3, 10]`):
-        (10 + d3) -> d2 (32) -> d1 (105) -> d_mid (287) -> 784
+    Reverse-diffusion generator `G` mirroring `E` (`[d_in, d1, d2, d3, 10]`):
+        (10 + d3) -> d2 -> d1 -> d_mid -> 784
     where `d_mid = round(sqrt(784 / d1) * d1)` bridges the big gap between `d1` and `784`.
     """
 
@@ -90,11 +89,11 @@ class ReverseDiffusionGenerator:
         self.d2 = int(d2)
         self.d3 = int(d3)
         self.d_out = int(d_out)
-        self.d_mid = midpoint_width(self.d1, out_pixels)  # round(sqrt(784 / 105) * 105) = 287
+        self.d_mid = midpoint_width(self.d1, out_pixels)
         self.out_pixels = int(out_pixels)
         self.lr = lr
 
-        top_dim = self.d_out + self.d3  # 10 + 11 = 21
+        top_dim = self.d_out + self.d3
 
         in1 = top_dim + self.d2
         self.W1 = self.rng.normal(0.0, np.sqrt(2.0 / in1), size=(in1, self.d2)).astype(np.float32)
@@ -271,7 +270,6 @@ def train_and_evaluate_same_stream_mlp(
     rng = np.random.default_rng(42)
     bsz = 256
 
-    # Phase 1: 12 clean epochs (matching Stage 1 L=3 training)
     for _ in range(12):
         perm = rng.permutation(len(tr_i))
         for i in range(0, len(tr_i), bsz):
@@ -282,7 +280,6 @@ def train_and_evaluate_same_stream_mlp(
             du_c = (softmax(u_c) - one_hot) / len(ib_c)
             mlp.backward_and_step(cache_c, du_c)
 
-    # Phase 2: 10 clean + diffusion epochs (matching Stage 1 Finalize [4] + Stage 3 [6] = 10 epochs)
     for _ in range(10):
         perm = rng.permutation(len(tr_i))
         for i in range(0, len(tr_i), bsz):
@@ -340,8 +337,14 @@ def evaluate_pipeline_stage(
     x_flat: np.ndarray,
     y_flat: np.ndarray,
     record_nat_snaps: bool = False,
+    use_tuples: bool = True,
 ):
     print(f"\n--- Evaluating {stage_label} ---")
+
+    def to_enc_input(i_canvas: np.ndarray):
+        if use_tuples:
+            return np.stack([x_flat * i_canvas, y_flat * i_canvas, i_canvas], axis=-1).reshape(len(i_canvas), 2352)
+        return i_canvas
 
     def run_convergence_loop(x_in: np.ndarray, i_in: np.ndarray, int_loss_gate: float = 0.14, conv_eps: float = 5e-4, record_snaps: bool = False):
         cur_x = x_in.copy()
@@ -372,7 +375,7 @@ def evaluate_pipeline_stage(
 
             gamma_state = np.clip(0.55 * s_loss_a, 0.12, 0.45)
             cand_i = (1.0 - gamma_state) * cur_i[act_idx] + gamma_state * next_i_a
-            cand_x = np.stack([x_flat * cand_i, y_flat * cand_i, cand_i], axis=-1).reshape(len(act_idx), 2352)
+            cand_x = to_enc_input(cand_i)
 
             cand_probs, cand_z3, _, _, _, _ = recognize_with_E(enc_step, cand_x, protos_step)
             _, _, _, _, cand_j_loss_col, _ = recognize_with_E(enc_judge, cand_x, protos_judge)
@@ -439,8 +442,8 @@ def evaluate_pipeline_stage(
     occ_summary = {}
     for mode in ["picket_fence", "center_blackout", "heavy_clutter"]:
         occ_u8 = apply_occlusions(test_img, mode=mode, seed=42)
-        x_occ = build_8bit_tuple_representation(occ_u8, couple_background=True)
         i_occ = (occ_u8.astype(np.float32) / 255.0).reshape(len(test_img), 784)
+        x_occ = build_8bit_tuple_representation(occ_u8, couple_background=True) if use_tuples else i_occ
 
         probs_o0, _, _, _, loss_o0_col, _ = recognize_with_E(enc_step, x_occ, protos_step)
         loss_o0 = loss_o0_col[:, 0]
@@ -487,8 +490,154 @@ def evaluate_pipeline_stage(
     return nat_summary, occ_summary, (loss_nat0, rescued_mask, snaps_bundle)
 
 
+def run_784_funnel_pipeline(
+    label: str,
+    E_init: ElasticFunnel,
+    tr_i: np.ndarray,
+    tr_y: np.ndarray,
+    i_test: np.ndarray,
+    test_img: np.ndarray,
+    test_lbl: np.ndarray,
+    x_flat: np.ndarray,
+    y_flat: np.ndarray,
+    train_stage1_12ep: bool = False,
+):
+    """
+    Run the 4-stage pipeline for a Pure 784 Pixel-Order Determination Funnel (`d_in = 784`),
+    where vector slot order already encodes pixel position without `3x` coordinate-tuple expansion.
+    """
+    encoder = copy.deepcopy(E_init)
+    rng = np.random.default_rng(42)
+    bsz = 256
+    ortho_w = [0.15, 0.15, 1.50]
+
+    if train_stage1_12ep:
+        for _ in range(12):
+            perm = rng.permutation(len(tr_i))
+            for i in range(0, len(tr_i), bsz):
+                idx = perm[i:i + bsz]
+                ib_c, yb = tr_i[idx], tr_y[idx]
+                one_hot = np.eye(10, dtype=np.float32)[yb]
+                _, u_c, cache_c = encoder.forward(ib_c)
+                encoder.backward_and_step(cache_c, (softmax(u_c) - one_hot) / len(ib_c), yb=yb, ortho_weights=ortho_w)
+
+    # Stage 1 Finalize (4 epochs)
+    for _ in range(4):
+        perm = rng.permutation(len(tr_i))
+        for i in range(0, len(tr_i), bsz):
+            idx = perm[i:i + bsz]
+            ib_c, yb = tr_i[idx], tr_y[idx]
+            one_hot = np.eye(10, dtype=np.float32)[yb]
+            _, u_c, cache_c = encoder.forward(ib_c)
+            encoder.backward_and_step(cache_c, (softmax(u_c) - one_hot) / len(ib_c), yb=yb, ortho_weights=ortho_w)
+            _, ib_t = forward_diffusion_on_clean(ib_c, x_flat, y_flat, rng)
+            _, u_t, cache_t = encoder.forward(ib_t)
+            encoder.backward_and_step(cache_t, (softmax(u_t) - one_hot) * (0.5 / len(ib_c)), yb=yb, ortho_weights=ortho_w)
+
+    E_frozen = copy.deepcopy(encoder)
+    protos_frozen = compute_layer_prototypes(E_frozen, tr_i[:10000], tr_y[:10000], n_classes=10)
+    d1_s, d2_s, d3_s = E_frozen.hidden_dims
+    G_s2 = ReverseDiffusionGenerator(d1=d1_s, d2=d2_s, d3=d3_s, d_out=10, out_pixels=784, lr=2.5e-3, seed=42)
+
+    # Stage 2: Train G against Frozen E (10 epochs)
+    for _ in range(10):
+        perm = rng.permutation(len(tr_i))
+        for i in range(0, len(tr_i), bsz):
+            idx = perm[i:i + bsz]
+            ib_c, yb = tr_i[idx], tr_y[idx]
+            _, _, z2_clean_n, z1_clean_n, _, _ = recognize_with_E(E_frozen, ib_c, protos_frozen)
+            _, ib_0 = forward_diffusion_on_clean(ib_c, x_flat, y_flat, rng)
+
+            probs_0, z3_0, z2_0, z1_0, int_loss_0, _ = recognize_with_E(E_frozen, ib_0, protos_frozen)
+            i_hat_0, z2_hat_0, z1_hat_0, cache_g_0 = G_s2.forward(probs_0, z3_0, z2_0, z1_0, int_loss_0)
+            ib_1, replace_w_0 = redraw_canvas_step(ib_0, i_hat_0, int_loss_0)
+            di_1, _, _ = E_frozen.input_gradient_from_supervised_loss(ib_1, yb, ortho_weights=ortho_w)
+            G_s2.backward_and_step(
+                cache_g_0,
+                (i_hat_0 - ib_c) * (1.8 / len(ib_c)) + (di_1 * replace_w_0) * 0.65,
+                (z2_hat_0 - z2_clean_n) * (0.5 / len(ib_c)),
+                (z1_hat_0 - z1_clean_n) * (0.5 / len(ib_c)),
+            )
+
+            probs_1, z3_1, z2_1, z1_1, int_loss_1, _ = recognize_with_E(E_frozen, ib_1, protos_frozen)
+            i_hat_1, z2_hat_1, z1_hat_1, cache_g_1 = G_s2.forward(probs_1, z3_1, z2_1, z1_1, int_loss_1)
+            ib_2, replace_w_1 = redraw_canvas_step(ib_1, i_hat_1, int_loss_1)
+            di_2, _, _ = E_frozen.input_gradient_from_supervised_loss(ib_2, yb, ortho_weights=ortho_w)
+            G_s2.backward_and_step(
+                cache_g_1,
+                (i_hat_1 - ib_c) * (1.8 / len(ib_c)) + (di_2 * replace_w_1) * 0.65,
+                (z2_hat_1 - z2_clean_n) * (0.5 / len(ib_c)),
+                (z1_hat_1 - z1_clean_n) * (0.5 / len(ib_c)),
+            )
+
+    # Stage 3: Reality-Anchored Relaxation (6 epochs)
+    E_anc = copy.deepcopy(E_frozen)
+    G_anc = copy.deepcopy(G_s2)
+    E_anc.lr = 4.0e-4
+    G_anc.lr = 1.0e-3
+    protos_anc = copy.deepcopy(protos_frozen)
+
+    for _ in range(6):
+        perm = rng.permutation(len(tr_i))
+        for i in range(0, len(tr_i), bsz):
+            idx = perm[i:i + bsz]
+            ib_c, yb = tr_i[idx], tr_y[idx]
+            one_hot = np.eye(10, dtype=np.float32)[yb]
+
+            _, u_c, cache_e_c = E_anc.forward(ib_c)
+            E_anc.backward_and_step(cache_e_c, (softmax(u_c) - one_hot) * (0.7 / len(ib_c)), yb=yb, ortho_weights=ortho_w)
+
+            _, _, z2_clean_n, z1_clean_n, _, _ = recognize_with_E(E_anc, ib_c, protos_anc)
+            _, ib_0 = forward_diffusion_on_clean(ib_c, x_flat, y_flat, rng)
+            _, u_0, cache_e_0 = E_anc.forward(ib_0)
+            E_anc.backward_and_step(cache_e_0, (softmax(u_0) - one_hot) * (0.6 / len(ib_c)), yb=yb, ortho_weights=ortho_w)
+
+            probs_0, z3_0, z2_0, z1_0, int_loss_0, _ = recognize_with_E(E_anc, ib_0, protos_anc)
+            i_hat_0, z2_hat_0, z1_hat_0, cache_g_0 = G_anc.forward(probs_0, z3_0, z2_0, z1_0, int_loss_0)
+            ib_1, replace_w_0 = redraw_canvas_step(ib_0, i_hat_0, int_loss_0)
+
+            di_1, _, _ = E_anc.input_gradient_from_supervised_loss(ib_1, yb, ortho_weights=ortho_w)
+            G_anc.backward_and_step(
+                cache_g_0,
+                (i_hat_0 - ib_c) * (1.6 / len(ib_c)) + (di_1 * replace_w_0) * 0.85,
+                (z2_hat_0 - z2_clean_n) * (0.5 / len(ib_c)),
+                (z1_hat_0 - z1_clean_n) * (0.5 / len(ib_c)),
+            )
+
+            correct_0 = (np.argmax(probs_0, axis=-1) == yb)[:, None].astype(np.float32)
+            _, u_1, cache_e_1 = E_anc.forward(ib_1)
+            du_1 = ((softmax(u_1) - one_hot) * correct_0) * (0.35 / len(ib_c))
+            E_anc.backward_and_step(cache_e_1, du_1, yb=yb, ortho_weights=[0.05, 0.05, 0.40])
+
+        protos_anc = compute_layer_prototypes(E_anc, tr_i[:10000], tr_y[:10000], n_classes=10)
+
+    nat_3a, occ_3a, _ = evaluate_pipeline_stage(
+        f"{label} — Stage 3A (Judged by Frozen E)",
+        E_anc,
+        G_anc,
+        protos_anc,
+        E_frozen,
+        protos_frozen,
+        i_test,
+        i_test,
+        test_img,
+        test_lbl,
+        x_flat,
+        y_flat,
+        record_nat_snaps=False,
+        use_tuples=False,
+    )
+    return {
+        "dims": E_anc.dims,
+        "params": E_anc.param_count,
+        "generator_cascade_dims": G_anc.cascade_dims,
+        "natural_mnist": nat_3a,
+        "occlusions_converged": occ_3a,
+    }
+
+
 def main():
-    print("Loading MNIST and building [0, 255]^3 tuple representation...")
+    print("Loading MNIST and building [0, 255]^3 tuple and 784 pixel-order representations...")
     train_img, train_lbl, test_img, test_lbl = load_mnist()
     x_train = build_8bit_tuple_representation(train_img, couple_background=True)
     x_test = build_8bit_tuple_representation(test_img, couple_background=True)
@@ -689,20 +838,20 @@ def main():
     )
 
     # =========================================================================
-    # STAGE 3 UNCONSTRAINED ABLATION: Unconditional Joint Relaxation (Judge Drift)
+    # STAGE 3 SINGLE-VARIABLE UNCONSTRAINED ABLATION: Removing ONLY `correct_0`
     # =========================================================================
     print(
-        f"\n=== Stage 3 Unconstrained Ablation: Joint Relaxation WITHOUT Reality Anchor ===\n"
-        f"  E unconditionally reinforces every redrawn canvas X^(1) toward label y (even when E(X^(0)) guessed\n"
-        f"  the wrong digit and G redrew a wrong-class hallucination) -> demonstrating Judge Drift."
+        f"\n=== Stage 3 Single-Variable Unconstrained Ablation: Removing ONLY `correct_0` Reality Anchor ===\n"
+        f"  100% identical learning rates, clean updates, corrupted updates, and loss weights as Stage 3 Anchored,\n"
+        f"  with ONLY `* correct_0` removed on X^(1) -> isolating Judge Drift on the uncertain tail and Picket Fence."
     )
     t_unc = time.time()
     rng_unc = np.random.default_rng(42)
     rng_unc.bit_generator.state = rng_state_after_s2
     E_unc = copy.deepcopy(E_frozen)
     G_unc = copy.deepcopy(G_s2)
-    E_unc.lr = 8.0e-4
-    G_unc.lr = 1.5e-3
+    E_unc.lr = 4.0e-4
+    G_unc.lr = 1.0e-3
     protos_unc = copy.deepcopy(protos_frozen)
 
     for ep in range(6):
@@ -713,10 +862,12 @@ def main():
             one_hot = np.eye(10, dtype=np.float32)[yb]
 
             _, u_c, cache_e_c = E_unc.forward(xb_c)
-            E_unc.backward_and_step(cache_e_c, (softmax(u_c) - one_hot) * (0.25 / len(xb_c)), yb=yb, ortho_weights=ortho_w)
+            E_unc.backward_and_step(cache_e_c, (softmax(u_c) - one_hot) * (0.7 / len(xb_c)), yb=yb, ortho_weights=ortho_w)
 
             _, _, z2_clean_n, z1_clean_n, _, _ = recognize_with_E(E_unc, xb_c, protos_unc)
             xb_0, ib_0 = forward_diffusion_on_clean(ib_c, x_flat, y_flat, rng_unc)
+            _, u_0, cache_e_0 = E_unc.forward(xb_0)
+            E_unc.backward_and_step(cache_e_0, (softmax(u_0) - one_hot) * (0.6 / len(xb_c)), yb=yb, ortho_weights=ortho_w)
 
             probs_0, z3_0, z2_0, z1_0, int_loss_0, _ = recognize_with_E(E_unc, xb_0, protos_unc)
             i_hat_0, z2_hat_0, z1_hat_0, cache_g_0 = G_unc.forward(probs_0, z3_0, z2_0, z1_0, int_loss_0)
@@ -728,22 +879,22 @@ def main():
             di_from_E_1 = (dx_1_3d[:, :, 0] * x_flat + dx_1_3d[:, :, 1] * y_flat + dx_1_3d[:, :, 2]) * replace_w_0
             G_unc.backward_and_step(
                 cache_g_0,
-                (i_hat_0 - ib_c) * (1.2 / len(xb_c)) + di_from_E_1 * 0.90,
+                (i_hat_0 - ib_c) * (1.6 / len(xb_c)) + di_from_E_1 * 0.85,
                 (z2_hat_0 - z2_clean_n) * (0.5 / len(xb_c)),
                 (z1_hat_0 - z1_clean_n) * (0.5 / len(xb_c)),
             )
 
-            # Unconstrained update on X^(1) even when E(X^(0)) guessed the wrong digit!
+            # Single-variable change: `* correct_0` removed so E updates on all X^(1) unconditionally
             _, u_1, cache_e_1 = E_unc.forward(xb_1)
-            du_1 = (softmax(u_1) - one_hot) * (0.95 / len(xb_c))
-            E_unc.backward_and_step(cache_e_1, du_1, yb=yb, ortho_weights=ortho_w)
+            du_1 = (softmax(u_1) - one_hot) * (0.35 / len(xb_c))
+            E_unc.backward_and_step(cache_e_1, du_1, yb=yb, ortho_weights=[0.05, 0.05, 0.40])
 
         protos_unc = compute_layer_prototypes(E_unc, tr_x[:10000], tr_y[:10000], n_classes=10)
 
-    print(f"   Completed Unconstrained Joint Relaxation in {time.time() - t_unc:.2f}s.")
+    print(f"   Completed Single-Variable Unconstrained Joint Relaxation in {time.time() - t_unc:.2f}s.")
 
-    s3u_nat, s3u_occ, _ = evaluate_pipeline_stage(
-        "Stage 3 Unconstrained Checkpoint (Relaxed E + G Without Reality Anchor, Self-Judged)",
+    s3u_self_nat, s3u_self_occ, _ = evaluate_pipeline_stage(
+        "Stage 3B Unconstrained Checkpoint (Single-Variable No-Anchor, Self-Judged)",
         E_unc,
         G_unc,
         protos_unc,
@@ -758,12 +909,74 @@ def main():
         record_nat_snaps=False,
     )
 
+    s3u_froz_nat, s3u_froz_occ, _ = evaluate_pipeline_stage(
+        "Stage 3A Unconstrained Checkpoint (Single-Variable No-Anchor, Judged by Stage-1 Frozen E)",
+        E_unc,
+        G_unc,
+        protos_unc,
+        E_frozen,
+        protos_frozen,
+        x_test,
+        i_test,
+        test_img,
+        test_lbl,
+        x_flat,
+        y_flat,
+        record_nat_snaps=False,
+    )
+
+    # =========================================================================
+    # PURE 784 PIXEL-ORDER DETERMINATION FUNNELS (No Redundant (x, y) Tuples)
+    # =========================================================================
+    print(
+        "\n=== Pure 784 Pixel-Order Determination Funnels (Vector Slot Order Encodes Position) ==="
+    )
+    stage1_784_results, opt_depth_784, encoder_784_disc = run_gradual_refinement_from_784_to_10(
+        i_train, train_lbl, i_test, test_lbl
+    )
+    funnel_784_disc_summary = run_784_funnel_pipeline(
+        "Discovered 784-Funnel (784 -> 85 -> 30 -> 10 -> 10, 69,725 params)",
+        encoder_784_disc,
+        tr_i,
+        tr_y,
+        i_test,
+        test_img,
+        test_lbl,
+        x_flat,
+        y_flat,
+        train_stage1_12ep=False,
+    )
+    funnel_784_105_init = ElasticFunnel([784, 105, 32, 11, 10], lr=1.8e-3, seed=42)
+    funnel_784_105_summary = run_784_funnel_pipeline(
+        "Same-Size 784-Funnel (784 -> 105 -> 32 -> 11 -> 10, 86,300 params)",
+        funnel_784_105_init,
+        tr_i,
+        tr_y,
+        i_test,
+        test_img,
+        test_lbl,
+        x_flat,
+        y_flat,
+        train_stage1_12ep=True,
+    )
+
     # =========================================================================
     # SAME-CORRUPTION-STREAM STANDARD MLP BASELINES (22 Epochs Exposure)
     # =========================================================================
     print("\n=== Training & Evaluating Same-Stream Standard MLP Baselines (22 Epochs Exposure) ===")
+    disc_width_mlp_summary = train_and_evaluate_same_stream_mlp(
+        "Same-Size 69.7k Standard MLP (784 -> 85 -> 30 -> 10 -> 10)",
+        [784, 85, 30, 10, 10],
+        tr_i,
+        tr_y,
+        i_test,
+        test_img,
+        test_lbl,
+        x_flat,
+        y_flat,
+    )
     same_width_mlp_summary = train_and_evaluate_same_stream_mlp(
-        "Same-Width Standard MLP (784 -> 105 -> 32 -> 11 -> 10)",
+        "Same-Size 86.3k Standard MLP (784 -> 105 -> 32 -> 11 -> 10)",
         [784, d1_star, d2_star, d3_star, 10],
         tr_i,
         tr_y,
@@ -774,7 +987,7 @@ def main():
         y_flat,
     )
     large_mlp_summary = train_and_evaluate_same_stream_mlp(
-        "2.5x Larger Standard MLP (784 -> 256 -> 64 -> 32 -> 10)",
+        "Closest-to-251k Standard MLP (784 -> 256 -> 64 -> 32 -> 10)",
         [784, 256, 64, 32, 10],
         tr_i,
         tr_y,
@@ -856,18 +1069,28 @@ def main():
         "legacy_256_64_32_funnel_params_weights_only": 620864,
         "param_reduction_vs_legacy_pct": round((1.0 - E_frozen.param_count / 621226.0) * 100.0, 1),
         "stage1_gradual_discovery": stage1_results,
+        "stage1_intensity_only_784_gradual_discovery": stage1_784_results,
         "stage2_generator_cascade_dims": G_s2.cascade_dims,
         "same_stream_baselines_22ep": {
+            "discovered_width_std_mlp_784_85_30_10_10": disc_width_mlp_summary,
             "same_width_std_mlp_784_105_32_11_10": same_width_mlp_summary,
             "large_std_mlp_784_256_64_32_10": large_mlp_summary,
+        },
+        "intensity_only_784_funnels": {
+            "discovered_784_85_30_10_10_stage3a": funnel_784_disc_summary,
+            "same_size_784_105_32_11_10_stage3a": funnel_784_105_summary,
         },
         "stage2_frozen_E_trained_G": {
             "natural_mnist": s2_nat,
             "occlusions_converged": s2_occ,
         },
         "stage3_unconstrained_relaxed_E_G": {
-            "natural_mnist": s3u_nat,
-            "occlusions_converged": s3u_occ,
+            "natural_mnist": s3u_self_nat,
+            "occlusions_converged": s3u_self_occ,
+        },
+        "stage3a_unconstrained_frozen_judge": {
+            "natural_mnist": s3u_froz_nat,
+            "occlusions_converged": s3u_froz_occ,
         },
         "stage3b_reality_anchored_self_judged": {
             "natural_mnist": s3b_nat,
