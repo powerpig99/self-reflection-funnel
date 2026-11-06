@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Render high-resolution (2x Retina) dark-theme PNG images of Benchmark Table 1 and Table 2
-for embedding in X Articles (which do not support native Markdown tables).
-Outputs:
+Render high-resolution (2x Retina) dark-theme PNG images of Benchmark Tables 1, 2, and 3
+for embedding in README and X Articles:
   - assets/table1_benchmark_comparison.png
   - assets/table2_maskfree_occlusion_loop.png
+  - assets/table3_dual_cut_3stage.png
   - assets/tables_combined.png
 """
 
@@ -147,11 +147,11 @@ def render_table1(fonts) -> Image.Image:
         ],
         [
             (["Full MNIST (60,000)"], [fonts["cell_bold"]], [TEXT_MAIN], "left"),
-            (["97.93%  (4.79s CPU)"], [fonts["cell_bold"]], [ACCENT_GREEN], "center"),
+            (["97.93% (256→64→32) / 97.67% (105→32→11)"], [fonts["cell_bold"]], [ACCENT_GREEN], "center"),
             (["97.71%"], [fonts["cell"]], [TEXT_MAIN], "center"),
             (["74.68%  (Cos: 0.935)"], [fonts["cell_bold"]], [ACCENT_RED], "center"),
             (["0.019 vs. 0.551", "(29× more orthogonal)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "center"),
-            (["83.9% vs. 40.6%", "(71.6% cut at Layer 1)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_PURPLE, TEXT_MUTED], "center"),
+            (["84.3% vs. 40.6%", "(68.7%–71.6% cut at Layer 1)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_PURPLE, TEXT_MUTED], "center"),
         ],
     ]
 
@@ -160,7 +160,6 @@ def render_table1(fonts) -> Image.Image:
     im = Image.new("RGB", (img_w, img_h), BG_OUTER)
     draw = ImageDraw.Draw(im)
 
-    # Title & Subtitle
     draw.text(
         (margin_x, margin_top),
         "Table 1 — Determination Funnel vs. Standard MLP & Pixel-Loss Autoencoder",
@@ -169,13 +168,12 @@ def render_table1(fonts) -> Image.Image:
     )
     draw.text(
         (margin_x, margin_top + 46),
-        "4-Layer Linear + ReLU Funnel (2,352 → 256 → 64 → 32 → 10) on [0, 255]³ Coordinate Tuples (Zero Convolutions, Zero Attention)",
+        "Linear + ReLU Funnel on [0, 255]³ Coordinate Tuples (Zero Convolutions, Zero O(N²) Token Polling)",
         fill=TEXT_MUTED,
         font=fonts["subtitle"],
     )
 
     t_top = margin_top + title_h
-    # Header row background
     draw.rectangle([margin_x, t_top, margin_x + table_w, t_top + header_h], fill=BG_HEADER, outline=BORDER_COL, width=2)
     cur_x = margin_x
     for col_idx, (w, h_lines) in enumerate(zip(col_widths, headers)):
@@ -192,7 +190,6 @@ def render_table1(fonts) -> Image.Image:
             draw.line([cur_x, t_top, cur_x, t_top + header_h + len(rows) * row_h], fill=BORDER_COL, width=1)
         cur_x += w
 
-    # Data rows
     for r_idx, r_data in enumerate(rows):
         ry0 = t_top + header_h + r_idx * row_h
         ry1 = ry0 + row_h
@@ -206,10 +203,8 @@ def render_table1(fonts) -> Image.Image:
                 draw.line([cur_x, ry0, cur_x, ry1], fill=BORDER_COL, width=1)
             cur_x += w
 
-    # Outer table border
     draw.rectangle([margin_x, t_top, margin_x + table_w, t_top + header_h + len(rows) * row_h], outline=BORDER_COL, width=2)
 
-    # Footer note
     fy = t_top + header_h + len(rows) * row_h + 18
     draw.text(
         (margin_x, fy),
@@ -283,7 +278,6 @@ def render_table2(fonts) -> Image.Image:
     im = Image.new("RGB", (img_w, img_h), BG_OUTER)
     draw = ImageDraw.Draw(im)
 
-    # Title & Subtitle
     draw.text(
         (margin_x, margin_top),
         "Table 2 — 100% Mask-Free Multi-Step Self-Reflection Loop (X_occ → z_k → X̂_k → E(X̂_k))",
@@ -339,25 +333,166 @@ def render_table2(fonts) -> Image.Image:
     return im
 
 
+def render_table3(fonts) -> Image.Image:
+    """Render Table 3: 3-Stage Dual-Cut Architecture (Gradual Layer Discovery + Internal-Loss Convergence Loop)."""
+    col_widths = [340, 380, 260, 215, 225, 200, 220]
+    table_w = sum(col_widths)
+    margin_x = 44
+    margin_top = 40
+    title_h = 92
+    header_h = 84
+    row_h = 82
+    footer_h = 68
+
+    headers = [
+        ["Stage & Regime", "(Start at 2352 → 10)"],
+        ["Midpoint Init → Discovered", "round(sqrt(d*_{l-1}/10)*10)"],
+        ["Parameters / Steps", "(Elastic Savings / Halting)"],
+        ["Step 0 / Head Acc", "(Single Pass E)"],
+        ["Converged / Proto Acc", "(Fixed Point X*)"],
+        ["Internal Loss", "(L_internal Drop)"],
+        ["Off-Diag Cos / Next", "(Midpoint Fixed Pt)"],
+    ]
+
+    rows = [
+        [
+            (["Stage 1: L = 0 (Direct Cut)"], [fonts["cell_bold"]], [TEXT_MAIN], "left"),
+            (["[2352, 10] → [2352, 10]"], [fonts["mono"]], [TEXT_MUTED], "center"),
+            (["23,530 params", "(0.0% shed)"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "center"),
+            (["92.59%"], [fonts["cell"]], [TEXT_MAIN], "center"),
+            (["92.59% (Proto)"], [fonts["cell"]], [TEXT_MUTED], "center"),
+            (["0.1492"], [fonts["cell"]], [ACCENT_RED], "center"),
+            (["Cos: 0.2231", "Next Mid: 153"], [fonts["cell"], fonts["footer"]], [TEXT_MUTED, ACCENT_BLUE], "center"),
+        ],
+        [
+            (["Stage 1: L = 1 (1st Split)"], [fonts["cell_bold"]], [TEXT_MAIN], "left"),
+            (["[2352, 153, 10]", "→ [2352, 121, 10]"], [fonts["mono"], fonts["mono_bold"]], [TEXT_MUTED, ACCENT_BLUE], "center"),
+            (["285,933 params", "(-20.9% shed)"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, ACCENT_GREEN], "center"),
+            (["97.56%"], [fonts["cell_bold"]], [TEXT_MAIN], "center"),
+            (["92.81% (Proto)"], [fonts["cell"]], [TEXT_MUTED], "center"),
+            (["0.1402"], [fonts["cell"]], [ACCENT_AMBER], "center"),
+            (["Cos: 0.1433", "Next Mid: 35"], [fonts["cell"], fonts["footer"]], [TEXT_MUTED, ACCENT_BLUE], "center"),
+        ],
+        [
+            (["Stage 1: L = 2 (2nd Split)"], [fonts["cell_bold"]], [TEXT_MAIN], "left"),
+            (["[2352, 153, 35, 10]", "→ [2352, 121, 12, 10]"], [fonts["mono"], fonts["mono_bold"]], [TEXT_MUTED, ACCENT_BLUE], "center"),
+            (["286,307 params", "(-21.7% shed)"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, ACCENT_GREEN], "center"),
+            (["97.41%"], [fonts["cell_bold"]], [TEXT_MAIN], "center"),
+            (["97.34% (Proto)"], [fonts["cell_bold"]], [ACCENT_GREEN], "center"),
+            (["0.0747"], [fonts["cell"]], [ACCENT_BLUE], "center"),
+            (["Cos: 0.0253", "Next Mid: 11"], [fonts["cell"], fonts["footer"]], [ACCENT_BLUE, ACCENT_PURPLE], "center"),
+        ],
+        [
+            (["Stage 1: L = 3 (Frozen E*)"], [fonts["cell_bold"]], [ACCENT_GREEN], "left"),
+            (["[2352, 153, 35, 11, 10]", "→ [2352, 105, 32, 11, 10]"], [fonts["mono"], fonts["mono_bold"]], [TEXT_MUTED, ACCENT_GREEN], "center"),
+            (["250,940 params", "(-31.4% shed, -60% vs v1)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
+            (["97.67%"], [fonts["cell_bold"]], [ACCENT_GREEN], "center"),
+            (["97.58% (Proto)"], [fonts["cell_bold"]], [ACCENT_GREEN], "center"),
+            (["0.0595"], [fonts["cell_bold"]], [ACCENT_GREEN], "center"),
+            (["Cos: 0.0191", "Next Mid: 10 (Fixed Pt!)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, ACCENT_GREEN], "center"),
+        ],
+        [
+            (["Stage 3: Natural Hard 5%", "(High Internal Loss Tail)"], [fonts["cell_bold"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "left"),
+            (["G: [10+11, 32, 105, 287, 784]", "(Midpoint 287 bridges 105→784)"], [fonts["mono"], fonts["footer"]], [ACCENT_PURPLE, TEXT_MUTED], "center"),
+            (["10.30 mean steps", "(95% low-loss: 0.03 steps)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "center"),
+            (["63.80%", "(Low-loss 95%: 99.13%)"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, ACCENT_GREEN], "center"),
+            (["64.60% (+0.80%)", "(14 hard digits rescued)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, TEXT_MUTED], "center"),
+            (["0.341 → 0.223", "(-34.6% IntLoss)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "center"),
+            (["Halts on ||Δz|| ≤ ε", "All 10k: 97.40%"], [fonts["cell"], fonts["footer"]], [TEXT_MAIN, ACCENT_GREEN], "center"),
+        ],
+        [
+            (["Stage 3: Unseen Occlusions", "(Fence / Blackout / Clutter)"], [fonts["cell_bold"], fonts["footer"]], [TEXT_MAIN, TEXT_MUTED], "left"),
+            (["Frozen E + Frozen G", "(Zero Retraining at Test)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "center"),
+            (["3.7 / 4.8 / 3.4 steps", "(p90: 11 / 16 / 10 steps)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_PURPLE, TEXT_MUTED], "center"),
+            (["74.1% / 55.9% / 83.9%"], [fonts["cell"]], [TEXT_MUTED], "center"),
+            (["75.7% / 59.2% / 85.3%", "(+1.6% / +3.3% / +1.4%)"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_GREEN, ACCENT_GREEN], "center"),
+            (["-36% to -40%", "IntLoss Drop"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "center"),
+            (["-15.5% / -7.0% / -16.5%", "Canvas Pixel MSE"], [fonts["cell_bold"], fonts["footer"]], [ACCENT_BLUE, TEXT_MUTED], "center"),
+        ],
+    ]
+
+    img_w = table_w + 2 * margin_x
+    img_h = margin_top + title_h + header_h + len(rows) * row_h + footer_h + 24
+    im = Image.new("RGB", (img_w, img_h), BG_OUTER)
+    draw = ImageDraw.Draw(im)
+
+    draw.text(
+        (margin_x, margin_top),
+        "Table 3 — 3-Stage Dual-Cut Pipeline: Gradual Layer Discovery (E) & Internal-Loss Diffusion Loop (G)",
+        fill=TEXT_MAIN,
+        font=fonts["title"],
+    )
+    draw.text(
+        (margin_x, margin_top + 46),
+        "11 derives itself at L = 3 via round(sqrt(12/10)*10) = 11 and reaches the midpoint fixed point round(sqrt(11/10)*10) = 10",
+        fill=TEXT_MUTED,
+        font=fonts["subtitle"],
+    )
+
+    t_top = margin_top + title_h
+    draw.rectangle([margin_x, t_top, margin_x + table_w, t_top + header_h], fill=BG_HEADER, outline=BORDER_COL, width=2)
+    cur_x = margin_x
+    for col_idx, (w, h_lines) in enumerate(zip(col_widths, headers)):
+        h_cols = [ACCENT_GREEN if col_idx in (1, 4) else TEXT_MAIN, TEXT_MUTED]
+        draw_multiline_centered(
+            draw,
+            (cur_x, t_top, cur_x + w, t_top + header_h),
+            h_lines,
+            [fonts["header"], fonts["footer"]],
+            h_cols,
+            align="left" if col_idx == 0 else "center",
+        )
+        if col_idx > 0:
+            draw.line([cur_x, t_top, cur_x, t_top + header_h + len(rows) * row_h], fill=BORDER_COL, width=1)
+        cur_x += w
+
+    for r_idx, r_data in enumerate(rows):
+        ry0 = t_top + header_h + r_idx * row_h
+        ry1 = ry0 + row_h
+        bg = BG_ROW_EVEN if r_idx % 2 == 0 else BG_ROW_ODD
+        draw.rectangle([margin_x, ry0, margin_x + table_w, ry1], fill=bg, outline=BORDER_COL, width=1)
+        cur_x = margin_x
+        for c_idx, (w, cell_spec) in enumerate(zip(col_widths, r_data)):
+            lines, f_list, c_list, align = cell_spec
+            draw_multiline_centered(draw, (cur_x, ry0, cur_x + w, ry1), lines, f_list, c_list, align=align)
+            if c_idx > 0:
+                draw.line([cur_x, ry0, cur_x, ry1], fill=BORDER_COL, width=1)
+            cur_x += w
+
+    draw.rectangle([margin_x, t_top, margin_x + table_w, t_top + header_h + len(rows) * row_h], outline=BORDER_COL, width=2)
+
+    fy = t_top + header_h + len(rows) * row_h + 18
+    draw.text(
+        (margin_x, fy),
+        "Stage 1 E [2352, 105, 32, 11, 10] is permanently frozen; Stage 2 G [10+11, 32, 105, 287, 784] redraws from actual recognition vectors until convergence.",
+        fill=ACCENT_BLUE,
+        font=fonts["footer"],
+    )
+    return im
+
+
 def main():
     fonts = load_fonts()
     im1 = render_table1(fonts)
     im2 = render_table2(fonts)
+    im3 = render_table3(fonts)
 
     p1 = ASSETS_DIR / "table1_benchmark_comparison.png"
     p2 = ASSETS_DIR / "table2_maskfree_occlusion_loop.png"
+    p3 = ASSETS_DIR / "table3_dual_cut_3stage.png"
     im1.save(p1)
     im2.save(p2)
+    im3.save(p3)
 
-    # Also save a combined stacked image
-    comb_w = max(im1.width, im2.width)
-    comb_h = im1.height + im2.height + 20
+    comb_w = max(im1.width, im2.width, im3.width)
+    comb_h = im3.height + im1.height + im2.height + 40
     comb = Image.new("RGB", (comb_w, comb_h), BG_OUTER)
-    comb.paste(im1, (0, 0))
-    comb.paste(im2, (0, im1.height + 20))
+    comb.paste(im3, (0, 0))
+    comb.paste(im1, (0, im3.height + 20))
+    comb.paste(im2, (0, im3.height + im1.height + 40))
     p_comb = ASSETS_DIR / "tables_combined.png"
     comb.save(p_comb)
-    print(f"Saved:\n  - {p1} ({im1.size})\n  - {p2} ({im2.size})\n  - {p_comb} ({comb.size})")
+    print(f"Saved:\n  - {p1} ({im1.size})\n  - {p2} ({im2.size})\n  - {p3} ({im3.size})\n  - {p_comb} ({comb.size})")
 
 
 if __name__ == "__main__":

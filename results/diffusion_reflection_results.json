@@ -1,0 +1,260 @@
+{
+  "stage1_frozen_encoder_dims": [
+    2352,
+    105,
+    32,
+    11,
+    10
+  ],
+  "stage1_frozen_encoder_params": 250940,
+  "stage1_gradual_discovery": {
+    "depth_0": {
+      "initial_dims": [
+        2352,
+        10
+      ],
+      "final_discovered_dims": [
+        2352,
+        10
+      ],
+      "width_trajectory": [
+        [
+          2352,
+          10
+        ]
+      ],
+      "initial_params": 23530,
+      "final_params": 23530,
+      "head_accuracy_pct": 92.59,
+      "prototype_accuracy_pct": 92.59,
+      "ce_loss": 0.2695,
+      "mean_internal_loss": 0.1492,
+      "off_diag_cos": 0.2231,
+      "relu_cutoff_pct_per_layer": [],
+      "next_midpoint_to_10": 153,
+      "seconds": 0.86
+    },
+    "depth_1": {
+      "initial_dims": [
+        2352,
+        153,
+        10
+      ],
+      "final_discovered_dims": [
+        2352,
+        121,
+        10
+      ],
+      "width_trajectory": [
+        [
+          2352,
+          153,
+          10
+        ],
+        [
+          2352,
+          130,
+          10
+        ],
+        [
+          2352,
+          124,
+          10
+        ],
+        [
+          2352,
+          121,
+          10
+        ]
+      ],
+      "initial_params": 361549,
+      "final_params": 285933,
+      "head_accuracy_pct": 97.56,
+      "prototype_accuracy_pct": 92.81,
+      "ce_loss": 0.084,
+      "mean_internal_loss": 0.1402,
+      "off_diag_cos": 0.1433,
+      "relu_cutoff_pct_per_layer": [
+        79.5
+      ],
+      "next_midpoint_to_10": 35,
+      "seconds": 4.13
+    },
+    "depth_2": {
+      "initial_dims": [
+        2352,
+        153,
+        35,
+        10
+      ],
+      "final_discovered_dims": [
+        2352,
+        121,
+        12,
+        10
+      ],
+      "width_trajectory": [
+        [
+          2352,
+          153,
+          35,
+          10
+        ],
+        [
+          2352,
+          123,
+          21,
+          10
+        ],
+        [
+          2352,
+          122,
+          13,
+          10
+        ],
+        [
+          2352,
+          121,
+          12,
+          10
+        ]
+      ],
+      "initial_params": 365759,
+      "final_params": 286307,
+      "head_accuracy_pct": 97.41,
+      "prototype_accuracy_pct": 97.34,
+      "ce_loss": 0.096,
+      "mean_internal_loss": 0.0747,
+      "off_diag_cos": 0.0253,
+      "relu_cutoff_pct_per_layer": [
+        69.7,
+        82.1
+      ],
+      "next_midpoint_to_10": 11,
+      "seconds": 4.81
+    },
+    "depth_3": {
+      "initial_dims": [
+        2352,
+        153,
+        35,
+        11,
+        10
+      ],
+      "final_discovered_dims": [
+        2352,
+        105,
+        32,
+        11,
+        10
+      ],
+      "width_trajectory": [
+        [
+          2352,
+          153,
+          35,
+          11,
+          10
+        ],
+        [
+          2352,
+          105,
+          32,
+          13,
+          10
+        ],
+        [
+          2352,
+          105,
+          32,
+          11,
+          10
+        ],
+        [
+          2352,
+          105,
+          32,
+          11,
+          10
+        ]
+      ],
+      "initial_params": 365915,
+      "final_params": 250940,
+      "head_accuracy_pct": 97.67,
+      "prototype_accuracy_pct": 97.58,
+      "ce_loss": 0.0879,
+      "mean_internal_loss": 0.0595,
+      "off_diag_cos": 0.0191,
+      "relu_cutoff_pct_per_layer": [
+        68.7,
+        61.8,
+        84.3
+      ],
+      "next_midpoint_to_10": 10,
+      "seconds": 5.06
+    }
+  },
+  "stage2_generator_cascade_dims": [
+    10,
+    11,
+    32,
+    105,
+    287,
+    784
+  ],
+  "stage3_natural_mnist": {
+    "all_10k_step0_acc_pct": 97.36,
+    "all_10k_converged_acc_pct": 97.4,
+    "low_loss_95pct_step0_acc_pct": 99.13,
+    "low_loss_95pct_converged_acc_pct": 99.13,
+    "low_loss_95pct_mean_steps": 0.03,
+    "high_loss_5pct_step0_acc_pct": 63.8,
+    "high_loss_5pct_converged_acc_pct": 64.6,
+    "high_loss_5pct_mean_steps": 10.3,
+    "rescued_natural_digits_count": 14
+  },
+  "stage3_occlusions_converged": {
+    "picket_fence": {
+      "step0_acc_pct": 74.11,
+      "converged_acc_pct": 75.69,
+      "loop_gain_pct": 1.58,
+      "initial_internal_loss": 0.2385,
+      "converged_internal_loss": 0.1531,
+      "mean_steps": 3.72,
+      "median_steps": 0,
+      "p90_steps": 11,
+      "max_steps": 225,
+      "initial_mse": 0.0774,
+      "converged_mse": 0.0654,
+      "mse_reduction_pct": 15.5
+    },
+    "center_blackout": {
+      "step0_acc_pct": 55.91,
+      "converged_acc_pct": 59.2,
+      "loop_gain_pct": 3.29,
+      "initial_internal_loss": 0.261,
+      "converged_internal_loss": 0.1598,
+      "mean_steps": 4.8,
+      "median_steps": 0,
+      "p90_steps": 16,
+      "max_steps": 174,
+      "initial_mse": 0.0513,
+      "converged_mse": 0.0477,
+      "mse_reduction_pct": 7.0
+    },
+    "heavy_clutter": {
+      "step0_acc_pct": 83.9,
+      "converged_acc_pct": 85.26,
+      "loop_gain_pct": 1.36,
+      "initial_internal_loss": 0.2055,
+      "converged_internal_loss": 0.1244,
+      "mean_steps": 3.42,
+      "median_steps": 0,
+      "p90_steps": 10,
+      "max_steps": 243,
+      "initial_mse": 0.1221,
+      "converged_mse": 0.1019,
+      "mse_reduction_pct": 16.5
+    }
+  }
+}

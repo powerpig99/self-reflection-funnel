@@ -1,73 +1,78 @@
-# Determination Funnel: Replacing Convolutions and Self-Attention with `[0, 255]³` Coordinate Tuples, Gradual `ReLU` Cuts, and Mask-Free Self-Reflection
+# Determination Funnel: Self-Reflection as the Dual Cut of Abstraction and Reverse-Diffusion Expression
+
+![3-Stage Dual-Cut Pipeline on Hard MNIST Digits](assets/diffusion_reflection_grid.png)
 
 ![Multi-Step Closed-Loop Occlusion Restoration on MNIST](assets/occlusion_refinement_grid.png)
 
-**Determination Funnel** is a pure-NumPy reference implementation and benchmark suite demonstrating that a simple four-stage **`Linear + ReLU` compression funnel (`2,352 → 256 → 64 → 32 → 10`)**—with **zero convolutions, zero `O(N²)` self-attention, and zero causal masking**—matches or outperforms standard feedforward networks on MNIST (`97.93%` in `4.79s` on CPU), achieves **`29× to 62×` cleaner latent orthogonality**, discovers **`10 / 10` digit clusters with zero labels (`53.91%` unsupervised purity)**, generalizes zero-shot across resolutions (`14×14`, `28×28`, `56×56`), and restores severely occluded digits across **100% mask-free self-reflection passes**—outperforming both clean-trained (`+33.4%` to `+39.1%`) and identically corruption-trained (`+0.7%` to `+8.0%`) open-loop MLPs while cutting canvas pixel error by `40%` to `74%`.
+**Determination Funnel** is a pure-NumPy reference implementation and benchmark suite grounded in [The Dual Cut](https://not-a-toe.com/posts/the-dual-cut/). It demonstrates that **self-attention is a special case of self-reflection**—extracting a low-dimensional abstraction from an input and applying that abstraction back onto the input's own high-dimensional payload:
+- **Stage 1 (Gradual Supervised Recognition Discovery `E`, Starting from `2,352 → 10`)**: Starting directly from `2,352 → 10` on `[0, 255]³` `(x, y, I)` coordinate tuples with **zero preset power-of-two widths and zero artificial width floors (`min_width = 1`)**, splitting only the remaining gap `d*_{l-1} → 10` via `D_init(l) = round(sqrt(d*_{l-1} / 10) * 10)` and elastic breathing discovers the exact 3-cut funnel **`2,352 → 105 → 32 → 11 → 10`** (`250,940` parameters—`60%` smaller than the legacy `256 → 64 → 32 → 10` network, reaching **`97.67%` accuracy** and **`0.0191` off-diagonal cosine**), where the **`11` (`10` digit cones + `1` shared bridge/uncertainty axis)** derives itself automatically and terminates layer discovery at the mathematical fixed point `round(sqrt(11 / 10) * 10) = 10`. `E` is then **frozen permanently**.
+- **Stage 2 (Reverse-Diffusion Generator `G` Trained by Iterative Redraw Against Frozen `E`)**: Because expression (`G: Z → X̂`) requires expanding detail across the large gap (`105 → 784`), inserting the midpoint layer `287 = round(sqrt(784 / 105) * 105)` creates a uniform `~2.8×` reverse-diffusion cascade **`[10 + 11] → 32 → 105 → 287 → 784`**. `G` is trained on clean numbers by feeding **frozen `E`'s actual recognition vectors** `Z^{(k)} = E(X^{(k)})` into `G` to redraw `X^{(k+1)}`, re-recognizing `X^{(k+1)}` with frozen `E`, and measuring supervised loss against the desired label `y`.
+- **Stage 3 (Test-Time Diffusion Gated by Internal Loss Until Recognition Vectors Converge)**: At test time (with both `E` and `G` frozen, zero retraining), gating by `E`'s intrinsic **Internal Loss (`L_internal`)** exits immediately at Step 0 on the low-loss `95%` of natural MNIST (**`99.13%` accuracy**, `mean = 0.03 steps`), while iterating the reverse-diffusion redraw loop on high-loss/uncertain digits and unseen occlusions in an **unbounded `while` loop** until `L_internal` stops dropping and the recognized vectors converge (`‖z^{(k+1)} - z^{(k)}‖_2 ≤ ε`), cutting internal loss by `36%–40%` and lifting accuracy across all three occlusion regimes (`+1.58%` on Picket Fence, `+3.29%` on Center Blackout, `+1.36%` on Heavy Clutter).
 
----
+## 1. Documented 3-Stage Implementation Plan & Architectural Thesis
 
-## 1. Core Architectural Thesis
+Full architectural specification: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
-Modern deep learning relies on two mechanisms of **external validation** on the surface plane—polling local neighbors in a `k × k` window (convolution) or polling every other token across an `O(N²)` room (self-attention)—literally seeking meaning from horizontal, external relationships while missing the **internal reflection (`E(G(z*)) = z*`)** that is the center of meaning. Just as no amount of external validation can satisfy or resolve a felt internal conflict, **true meaning lies in coherence as a result of internal reflection**:
-1. **Why Self-Reflection (`E(G(z*)) = z*`) Replaces `O(N²)` Self-Attention (`X ↔ X`)**: A standard Transformer keeps `N` surface token vectors at every layer from input to output. Because it refuses to separate the **low-dimensional latent representation (`z*`, the collective identity)** from the **high-dimensional surface expression (`X`, the parts)**, every part must query every other part (`Q · Kᵀ`) horizontally to simulate a shared abstraction. Once representation (`z*`) is separated from expression (`X`)—compressing `X` upward into `(z1, z2, z*)`, re-expressing the multi-scale state downward into `X̂ = G(z*, z2, z1)`, and feeding the self-reflected canvas back into the input encoder `E` so that `E(X̂) = z*`—the self-referential relationship is established by internal reflection and compiled directly into the weights, making `O(N²)` self-attention redundant.
-2. **Why CNNs Needed Rigid `k × k` Spatial Stencils**: Engineers stripped a pixel's coordinates `(x, y)` out of the datum and hid them in the 2D array index `I[x, y]`, forcing networks to slide a pre-frozen `3 × 3` stencil uniformly across empty background and occluded foreground alike. In biological vision, `~120M` photoreceptors compress into `~1M` optic nerve fibers right at Layer 1 because a single pixel has no independent meaning on its own.
-3. **The `[0, 255]³` Coordinate-Value Universe & `ReLU` as Determination**:
-   - Every pixel `i` already carries both its position and its value: `(xᵢ, yᵢ, Iᵢ)` for grayscale (`3D`), `(x, y, R, G, B)` for color (`5D/6D`), and `(x, y, t, R, G, B, …)` for video (`7D`).
-   - Because a picture is the entire observational universe for that picture, scaling `x` and `y` to the full 8-bit range `[0, 255]` alongside the 8-bit intensity `I ∈ [0, 255]` (with empty background `I = 0` carrying zero spatial offset `(x · I/255, y · I/255, I) = (0, 0, 0)`) places every image of any resolution inside the same **`[0, 255]³` state space**.
-   - Summing multi-dimensional tuples across the field (`u = Wx + b`) expands candidate linear combinations; applying **`ReLU` (`z = max(0, u)`)** slices off `71.6%–83.9%` of insignificant sub-threshold fluctuations to `0`. Because `z ≥ 0` lives in the non-negative orthant, **two representations are orthogonal (`z_a · z_b = 0`) if and only if they activate completely disjoint neurons**.
+1. **Why Fixed-Task Perception Needs Zero `O(N²)` Token Polling**:
+   - Under [The Dual Cut](https://not-a-toe.com/posts/the-dual-cut/), every token in an open-ended sequence carries both substantive payload (`V`) and operational instruction (`K`). In fixed-task visual recognition, however, the top-level command—*"recognize this picture as one of the 10 digits `0–9`"*—is **implied by the problem statement itself** (`d_out = 10`) and compiled into the network.
+   - Running `O(N²)` self-attention across 784 raw pixels (`X ↔ X`) is an unconsolidated way to simulate a shared abstraction when the spatial coordinates `(x, y)` were stripped from pixel intensities `I`. Placing every pixel inside the canonical **`[0, 255]³` coordinate-value universe** `(xᵢ · Iᵢ/255, yᵢ · Iᵢ/255, Iᵢ)` allows a steep `Linear + ReLU` funnel to extract the low-dimensional abstraction directly.
+2. **Why Abstraction (`E`) and Expression (`G`) Are Asymmetric**:
+   - **Abstraction (`E: 2,352 → 105 → 32 → 11 → 10`)** is many-to-one lossy compression: `ReLU` cuts zero out `68.7%–84.3%` of sub-threshold fluctuations at each layer, isolating `10` orthogonal digit cones (`Off-Diag Cos = 0.0191`) plus a spontaneously derived `11th` bridge/indeterminacy axis ([eleventh_dimension_inspection.png](assets/eleventh_dimension_inspection.png)). Once learned, `E` stays invariant.
+   - **Expression (`G: [10 + 11] → 32 → 105 → 287 → 784`)** is one-to-many detail synthesis: it bridges the `105 → 784` chasm via the midpoint layer `287 = round(sqrt(784 / 105) * 105)` and acts as an intermediate diffusion denoiser. Uncertain or occluded inputs enter as **middle steps `X_t` of a diffusion trajectory**—redrawn from their current recognition vectors `Z^{(k)} = E(X^{(k)})` and re-tested by frozen `E` until `L_internal` bottoms out and the recognized vectors converge (`E(G(z*)) = z*`).
 
----
+## 2. Experimental Results (`seed = 42`, Pure NumPy on CPU)
 
-## 2. Key Experimental Results (`seed = 42`, Pure NumPy on CPU)
+### A. Stage 1 — Gradual Layer & Width Discovery Starting from `2,352 → 10` (`run_elastic_funnel.py`)
 
-### A. Head-to-Head Comparison Against Traditional Standard Implementations
+Starting directly from `2,352 → 10` (`L = 0`) with `min_width = 1` (zero artificial floor), each refinement step `l` splits the remaining gap between the **actual discovered width `d*_{l-1}`** and `10` at $D_{\text{init}}(l) = \text{round}(\sqrt{d^*_{l-1} / 10} \cdot 10)$ and breathes elastically via collinear cone folding (`cos ≥ 0.90`) and spent-scaffolding pruning (`< 5%` mean layer energy):
 
-All three models share the exact same internal layer widths (`256 → 64 → 32 (z*) → 10`) and are evaluated on the official `10,000`-image MNIST test set (`run_experiment.py`):
+| Refinement Step (`L`) | Midpoint Init (from Discovered `d*_{l-1}`) | Discovered Architecture (`[2352, …, 10]`) | Parameters (`%` Shed vs. Init) | Test Accuracy (`Head / Proto`) | Mean Internal Loss (`L_internal`) | Latent Orthogonality (`Off-Diag Cos`) | Next Midpoint $\text{round}(\sqrt{d^*_l/10}\cdot 10)$ |
+| :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| **`L = 0` (Direct Cut)** | `[2352, 10]` | **`[2352, 10]`** | `23,530` (`0.0%`) | `92.59% / 92.59%` | `0.1492` | `0.2231` | `153` |
+| **`L = 1` (1st Split)** | `[2352, 153, 10]` | **`[2352, 121, 10]`** | `285,933` (`-20.9%`) | `97.56% / 92.81%` | `0.1402` | `0.1433` | `35` |
+| **`L = 2` (2nd Split)** | `[2352, 153, 35, 10]` | **`[2352, 121, 12, 10]`** | `286,307` (`-21.7%`) | `97.41% / 97.34%` | `0.0747` | `0.0253` | `11` |
+| **`L = 3` (Fixed Point)** | `[2352, 153, 35, 11, 10]` | **`[2352, 105, 32, 11, 10]`** | **`250,940` (`-31.4%`)** | **`97.67% / 97.58%`** | **`0.0595`** | **`0.0191`** | **`10` (Converged!)** |
 
-| Regime / Metric | Determination Funnel (`(x, y, I)` + Latent Group Loss) | Standard Cross-Entropy MLP (`I`-Only, Output CE Loss) | Standard Pixel-Loss Autoencoder (Surface Loss `‖X̂ − X‖²`) | Latent Orthogonality (`Off-Diag Cos` in `32d` `z*`: Funnel vs. Std MLP) | `32d` `z*` `ReLU` Cutoff (`%` Zeroed Out: Funnel vs. Std MLP) |
+- **Why `11` Emerges Automatically and Terminates Depth Discovery**: At `L = 2`, the second hidden cut collapses from `35` to `12`, whose midpoint to `10` is `round(sqrt(12 / 10) * 10) = 11`. At `L = 3`, that `11`-neuron cut survives with zero pruning even under `min_width = 1` (`10` pure digit cones + `1` shared upper-loop bridge cone across digits `3, 9, 8`, visualized in [eleventh_dimension_inspection.png](assets/eleventh_dimension_inspection.png)), while its next midpoint to `10` is `round(sqrt(11 / 10) * 10) = 10`—reaching the exact fixed point of the refinement rule.
+
+### B. Stage 2 & Stage 3 — Internal-Loss Gated Reverse-Diffusion Reflection (`run_diffusion_reflection.py`)
+
+With `E` (`[2352, 105, 32, 11, 10]`) permanently frozen, `G` (`[10 + 11, 32, 105, 287, 784]`) is trained on clean numbers by iterative redraw-and-recognize (`X^{(k)} → Z^{(k)} = E(X^{(k)}) → X^{(k+1)} = Redraw(X^{(k)}, G(Z^{(k)})) → E(X^{(k+1)})`) and evaluated at test time in an **unbounded self-terminating loop** that halts for each image as soon as `L_internal` stops dropping or the recognized vectors converge (`‖z^{(k+1)} - z^{(k)}‖_2 ≤ 5×10⁻⁴`):
+
+| Test Regime (`10,000` Unseen Test Set, Frozen `E` & `G`) | Step 0 Accuracy (`E(X^{(0)})`) | Converged Accuracy (`X^*`) | Loop Gain (`Δ Acc`) | Internal Loss (`Step 0 → Converged`) | Steps Taken (`Mean / Med / p90 / Max`) | Canvas Pixel MSE Reduction |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Natural MNIST — Low-Loss 95% (`L_int < 0.14`)** | `99.13%` | **`99.13%`** | `+0.00%` (Preserved) | `0.042 → 0.042` | **`0.03` / `0` / `0` / `2`** | Untouched (`O(1)` exit) |
+| **Natural MNIST — High-Loss 5% (`L_int ≥ 0.14`)** | `63.80%` | **`64.60%`** | **`+0.80%`** (`14` rescued) | **`0.341 → 0.223`** (`-34.6%`) | **`10.3` / `8` / `24` / `89`** | Clarified strokes ([grid](assets/diffusion_reflection_grid.png)) |
+| **Natural MNIST — Full `10,000` Test Set** | `97.36%` | **`97.40%`** | `+0.04%` | `0.057 → 0.051` | `0.54` / `0` / `1` / `89` | Selective redraw on hard tail |
+| **Picket Fence (`Zero-Shot Unbounded Loop`)** | `74.11%` | **`75.69%`** | **`+1.58%`** | **`0.239 → 0.153`** (`-36.0%`) | **`3.7` / `0` / `11` / `225`** | **`-15.5%`** (`0.0774 → 0.0654`) |
+| **Center Blackout (`Zero-Shot Unbounded Loop`)** | `55.91%` | **`59.20%`** | **`+3.29%`** | **`0.261 → 0.160`** (`-38.7%`) | **`4.8` / `0` / `16` / `174`** | **`-7.0%`** (`0.0513 → 0.0477`) |
+| **Heavy Clutter (`Zero-Shot Unbounded Loop`)** | `83.90%` | **`85.26%`** | **`+1.36%`** | **`0.205 → 0.124`** (`-39.5%`) | **`3.4` / `0` / `10` / `243`** | **`-16.5%`** (`0.1221 → 0.1019`) |
+
+### C. Reference Benchmark Comparisons (`run_experiment.py` & `run_occlusion_loop.py`)
+
+Head-to-head comparison across sample regimes (`1-shot` to `60,000` full MNIST) and 4-step corruption-matched occlusion benchmarks:
+
+| Regime / Metric | Determination Funnel (`(x, y, I)` + Latent Group Loss) | Standard Cross-Entropy MLP (`I`-Only, Output CE Loss) | Standard Pixel-Loss Autoencoder (Surface Loss `‖X̂ − X‖²`) | Latent Orthogonality (`Off-Diag Cos`: Funnel vs. Std MLP) | `ReLU` Cutoff (`%` Zeroed Out: Funnel vs. Std MLP) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **1-Shot (10 samples total)** | **43.39%** (Pathway 2) / **42.08%** (Pathway 1) | 39.19% | 30.05% (`Cos: 0.367`) | **`0.014` vs. `0.634`** (`45×` more orthogonal) | **`78.8%` vs. `44.0%`** |
+| **1-Shot (10 samples total)** | **43.39%** (Fwd) / **42.08%** (Loop) | 39.19% | 30.05% (`Cos: 0.367`) | **`0.014` vs. `0.634`** (`45×` more orthogonal) | **`78.8%` vs. `44.0%`** |
 | **5-Shot (50 samples)** | **68.20%** | 65.23% | 44.54% (`Cos: 0.870`) | **`0.017` vs. `0.694`** (`41×` more orthogonal) | **`80.8%` vs. `23.5%`** |
 | **10-Shot (100 samples)** | **74.92%** | 71.70% | 60.21% (`Cos: 0.757`) | **`0.017` vs. `0.736`** (`43×` more orthogonal) | **`76.2%` vs. `27.7%`** |
 | **50-Shot (500 samples)** | **88.52%** | 88.84% | 74.24% (`Cos: 0.894`) | **`0.011` vs. `0.683`** (`62×` more orthogonal) | **`81.9%` vs. `36.6%`** |
-| **Full MNIST (60,000)** | **97.93%** (`4.79s` CPU) | 97.71% | **74.68%** (`Cos: 0.935`) | **`0.019` vs. `0.551`** (`29×` more orthogonal) | **`83.9%` vs. `40.6%`** (`71.6%` at L1) |
+| **Full MNIST (60,000)** | **97.93%** (`256→64→32`) / **97.67%** (`105→32→11`) | 97.71% | **74.68%** (`Cos: 0.935`) | **`0.019` vs. `0.551`** (`29×` more orthogonal) | **`84.3%` vs. `40.6%`** |
 
-- **Why Surface Expression Loss (`‖X̂ − X‖²`) Fails to Separate the Abstraction**: In the Standard Pixel-Loss Autoencoder, penalizing surface pixel error forces the positive `ReLU` bottleneck `z* ≥ 0` to memorize stroke thickness, slant, and shared pixel intensity, driving its 10 digit prototypes into a single shared cone across sample counts (`Off-Diag Cos: 0.367, 0.870, 0.757, 0.894, 0.935` across `1-shot`, `5-shot`, `10-shot`, `50-shot`, and `Full MNIST`) and capping full-dataset prototype accuracy at **`74.68%`** (vs. **`97.93%`** and `Cos = 0.019` when loss is measured at `z*`).
-- **Zero-Label Unsupervised 10-Group Discovery (`Pathway 2B`)**: With **zero labels**, training the forward pass solely to minimize conditional group entropy `H(group | x)`, maximize marginal group entropy `H(group)`, and align local `(x, y, I)` neighbors activates **all `10 / 10` groups** (`[837, 1143, 809, 951, 787, 1142, 1154, 962, 1081, 1134]` across the 10,000 test digits) and reaches **`53.91%` unsupervised cluster purity** (`5.4×` random chance) in `7.70s`.
-- **Zero-Shot Multi-Resolution Generalization**: Evaluating the `28×28`-trained weights on test digits downsampled to `14×14` or upsampled to `56×56` and mapped onto the canonical `[0, 255]³` universe achieves **`96.26%` (`14×14`)**, **`97.77%` (`28×28`)**, and **`97.75%` (`56×56`)**.
+- **Zero-Label Unsupervised 10-Group Discovery (`Pathway 2B`)**: Training the forward pass with zero labels to minimize conditional group entropy `H(group | x)`, maximize marginal group entropy `H(group)`, and align local `(x, y, I)` neighbors activates **all `10 / 10` groups** and reaches **`53.91%` unsupervised cluster purity** (`5.4×` random chance).
+- **Zero-Shot Multi-Resolution Generalization**: Evaluating `28×28`-trained weights on test digits downsampled to `14×14` or upsampled to `56×56` in the `[0, 255]³` coordinate universe achieves **`96.26%` (`14×14`)**, **`97.77%` (`28×28`)**, and **`97.75%` (`56×56`)**.
 
-### B. 100% Mask-Free Multi-Step Self-Reflection on Occluded Digits (`run_occlusion_loop.py`)
-
-Tested across all `10,000` unseen MNIST test digits under three severe corruptions—**with ZERO external occlusion mask passed at test time** (`apply_occlusions` returns only the corrupted image)—and compared against **both** a Clean-Trained Standard MLP and a Same-Corruption-Trained Standard MLP (trained on the exact same corruption stream and step count as the funnel):
-1. **Picket Fence**: 3 horizontal bands erased to `0` + 2 bright vertical fence bars (`I = 220`) drawn across the digit.
-2. **Center Blackout**: A `10 × 12` box wiping out the central intersection of the digit.
-3. **Heavy Clutter**: `45%` random stroke dropout + `15%` bright static spikes across the `[0, 255]³` field.
-
-| Corruption Mode (`100% Mask-Free`) | Std MLP (Clean-Trained) | Std MLP (Same-Corruption-Trained) | Loop Step 0 (`E(X_occ)`) | Loop Step 1 (Mask-Free) | Loop Step 2 (Mask-Free) | Loop Step 3 (Mask-Free) | Loop Step 4 (Mask-Free) | Latent Cosine `cos(zₖ, z*_clean)` (`Step 0 → 4`) | Canvas Pixel MSE to Clean Digit (`Step 0 → 4`) |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Picket Fence** | 42.95% | 80.44% | 79.45% | 81.05% | 81.76% | 82.04% | **82.09%** (`+2.64%` loop) | `0.8613 → 0.8746` | `0.0774 → 0.0324` (**`-58%` error**) |
-| **Center Blackout** | 40.15% | 68.53% | 69.47% | 73.88% | 75.69% | 76.18% | **76.53%** (`+7.06%` loop) | `0.7365 → 0.8129` | `0.0513 → 0.0307` (**`-40%` error**) |
-| **Heavy Clutter** | 52.24% | 84.93% | 84.61% | 85.58% | **85.65%** (`+1.04%` peak) | 85.56% | 85.49% (`+0.88%` loop) | `0.8850 → 0.9037` | `0.1221 → 0.0318` (**`-74%` error**) |
-
-- **How Mask-Free Self-Reflection Resolves Conflict Without an External Oracle**: At each pass `k`, the hierarchical downward generator `G(z*, z2, z1)` articulates the internal expectation `i_hat_k` onto the canvas and compares it directly against `i_occ` (`agree = clip(i_occ * i_hat / 0.15, 0, 1) * clip(1 - max(0, i_occ - i_hat - 0.10) / 0.35, 0, 1)`). Where `i_occ` and `i_hat` corroborate one another, visible strokes stay anchored; where `i_occ` is missing (`Center Blackout` / erased bands) or has an unexplained bright bar/spike (`Picket Fence` / `Heavy Clutter`), `agree → 0` and the contractive fixed-point update resolves the conflict toward `i_hat`.
-- **Apples-to-Apples Loop Gain**: Even when the Standard MLP is trained on the exact same corruption stream (`80.44% / 68.53% / 84.93%`), it remains trapped in a single open-loop pass. The mask-free self-reflection loop climbs monotonically from `Step 0` to `Step 4` on **Picket Fence** (`79.45% → 82.09%`, beating the corruption-trained MLP by **`+1.65%`**) and **Center Blackout** (`69.47% → 76.53%`, a **`+7.06%` mask-free loop gain** that beats the corruption-trained MLP by **`+8.00%`** and the clean-trained MLP by **`+36.38%`**), while cutting canvas pixel MSE by **`40%` to `74%`**.
-
----
-
-## 3. Quick Start (Pure NumPy + Pillow, ~30 Seconds on CPU)
+## 3. Quick Start (Pure NumPy + Pillow on CPU)
 
 ```bash
 pip install numpy pillow
-python3 run_experiment.py
-python3 run_occlusion_loop.py
+python3 run_elastic_funnel.py         # Stage 1: Gradual layer & width discovery from 2352 -> 10
+python3 run_diffusion_reflection.py   # Stages 1-3: Frozen E + Reverse-Diffusion G + Internal-Loss Convergence Loop
+python3 run_experiment.py             # Reference few-shot, unsupervised, and multi-resolution benchmarks
+python3 run_occlusion_loop.py         # Reference 4-step corruption-matched occlusion benchmark
+python3 render_tables.py              # Render Retina PNG benchmark tables in ./assets/
 ```
-
-Both scripts automatically download the official MNIST IDX files into `./data/` if not already present, run all benchmarks with analytical gradients in pure NumPy, and write JSON metrics to `./results/` and the visual restoration grid to `./assets/occlusion_refinement_grid.png`.
-
-## 4. Long-Form X Article & Repository
-
-- **Published X Article**: [Attention Is Not at All What You Need—Self-Reflection Is (`@powerpig` on X)](https://x.com/powerpig/status/2117986860995621026) · [Local Markdown (`X_ARTICLE.md`)](X_ARTICLE.md)
-- **Repository**: [https://github.com/powerpig99/self-reflection-funnel](https://github.com/powerpig99/self-reflection-funnel)
 
 ## License
 
